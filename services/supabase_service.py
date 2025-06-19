@@ -1,16 +1,16 @@
 from config import supabase
 from datetime import datetime
-def add_post(content: str):
+def add_post(content: str, scheduled_at: datetime = None):
     try:
         placeholder_user_id = None
         platform = "X"
-        scheduled_at = datetime.now().isoformat()
+        schedule_time = scheduled_at if scheduled_at else datetime.now()
         
         post_data = {
             "user_id": placeholder_user_id,
             "platform": platform,
             "content": content,
-            "scheduled_at": scheduled_at,
+            "scheduled_at": schedule_time.isoformat(),
             "status": "scheduled"
         }
         data, count = supabase.table("posts").insert(post_data).execute()

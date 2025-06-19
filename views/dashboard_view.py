@@ -1,4 +1,5 @@
 import flet as ft
+from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
@@ -47,15 +48,15 @@ class DashboardView(ft.Row):
         print("DashboardView.initialize() llamado. Cargando posts...")
         await self.load_queue_posts()
         
-    def handle_schedule_click(self, content: str):
-        self.page_ref.run_task(self._do_schedule_and_reload, content)
+    def handle_schedule_click(self, content: str, scheduled_at: datetime | None):
+        self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at)
     
-    async def _do_schedule_and_reload(self, content: str):
+    async def _do_schedule_and_reload(self, content: str, scheduled_at: datetime | None):
         if not content or not content.strip():
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
         
-        result = add_post(content)
+        result = add_post(content, scheduled_at)
         
         if result.get("success"):
             self.post_composer.clear()
