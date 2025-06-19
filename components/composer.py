@@ -58,7 +58,7 @@ class PostComposer(ft.Container):
         self.schedule_button = ft.FilledButton(
             text="Programar",
             icon=ft.Icons.SEND,
-            on_click=lambda e: self.on_schedule_click(self.text_field.value),
+            on_click=self.schedule_button_clicked,
             style=ft.ButtonStyle(
                 bgcolor=PRIMARY,
                 color=ON_PRIMARY
@@ -114,13 +114,20 @@ class PostComposer(ft.Container):
             ]
         )
     
-    async def handle_date_change(self, e):
+    async def schedule_button_clicked(self, e):
+        final_datetime = None
+        if self.selected_date and self.selected_time:
+            final_datetime = datetime.combine(self.selected_date, self.selected_time)
+        
+        self.on_schedule_click(self.text_field.value, final_datetime)
+    
+    def handle_date_change(self, e):
         self.selected_date = e.control.value
         print(f"Fecha seleccionada: {self.selected_date}")
         
-        await self.page.open(self.time_picker)
+        self.page.open(self.time_picker)
     
-    async def handle_time_change(self,e):
+    def handle_time_change(self,e):
         self.selected_time = e.control.value
         print(f"Hora seleccionada: {self.selected_time}")
         
@@ -128,7 +135,7 @@ class PostComposer(ft.Container):
         
         self.scheduled_display.value = f"Programado para: {final_datetime.strftime('%d de %B, %H:%M')}"
         self.scheduled_display.visible = True
-        await self.update()
+        self.update()
     
     def update_char_count(self,e):
         count = len(self.text_field.value)
@@ -141,6 +148,9 @@ class PostComposer(ft.Container):
     
     def clear(self):
         self.text_field.value = ""
+        self.selected_date = None
+        self.selected_time = None
+        self.scheduled_display.visible = False
         self.update_char_count(None)
         self.feedback_message.visible = False 
         self.feedback_message.update()
