@@ -1,4 +1,5 @@
 import flet as ft
+import threading
 from theme import SURFACE, BORDER, PRIMARY, ON_PRIMARY, TEXT_SECONDARY, TEXT_PRIMARY
 
 class PostComposer(ft.Container):
@@ -12,6 +13,8 @@ class PostComposer(ft.Container):
         self.padding = 20
         
         self.char_counter = ft.Text("0/280", color=TEXT_SECONDARY)
+        
+        self.feedback_message = ft.Text(value="", color=ft.Colors.GREEN_700, visible=False)
         
         #Elementos UI
         self.text_field = ft.TextField(
@@ -59,6 +62,11 @@ class PostComposer(ft.Container):
                                 )]
                         )
                     ]
+                ),
+                ft.Row(
+                    controls=[
+                        self.feedback_message
+                    ]
                 )
             ]
         )
@@ -71,3 +79,22 @@ class PostComposer(ft.Container):
         else:
             self.char_counter.color = TEXT_SECONDARY
         self.char_counter.update()
+    
+    def clear(self):
+        self.text_field.value = ""
+        self.update_char_count(None)
+        self.hide_feedback()
+        self.text_field.update()
+    
+    def show_feedback(self, message: str, is_error :bool= False):
+        self.feedback_message.value = message
+        self.feedback_message.color = ft.Colors.RED_500 if is_error else ft.Colors.GREEN_700
+        self.feedback_message.visible = True
+        self.feedback_message.update()
+        
+        timer = threading.Timer(3.0, self.hide_feedback)
+        timer.start()
+    
+    def hide_feedback(self):
+        self.feedback_message.visible = True
+        self.feedback_message.update()
