@@ -1,5 +1,6 @@
 import flet as ft
 import threading
+from datetime import datetime, time
 from theme import SURFACE, BORDER, PRIMARY, ON_PRIMARY, TEXT_SECONDARY, TEXT_PRIMARY
 
 class PostComposer(ft.Container):
@@ -7,6 +8,11 @@ class PostComposer(ft.Container):
         super().__init__()
         
         self.on_schedule_click = on_schedule_click 
+        
+        #Hora
+        self.selected_date = None
+        self.selected_time  = None
+        #Diseno del container
         self.bgcolor = SURFACE
         self.border = ft.border.all(1, BORDER)
         self.border_radius = 8 
@@ -17,6 +23,27 @@ class PostComposer(ft.Container):
         self.feedback_message = ft.Text(value="", color=ft.Colors.GREEN_700, visible=False)
         
         #Elementos UI
+        
+        self.date_picker = ft.DatePicker(
+            on_change=self.handle_date_change,
+            on_dismiss=lambda e: print("DatePicker cerrado"),
+            first_date=datetime.now(),
+            help_text="Selecciona una fecha para tu post"
+        )
+        
+        self.time_picker = ft.TimePicker(
+            on_change=self.handle_time_change,
+            on_dismiss=lambda e: print("TimePicker cerrado"),
+            confirm_text="Confirmar",
+            help_text="Selecciona una hora"
+        )
+        
+        self.scheduled_display = ft.Text(
+            "",
+            color=TEXT_SECONDARY,
+            visible=False
+        )
+        
         self.text_field = ft.TextField(
             multiline=True,
             min_lines=4,
@@ -27,6 +54,7 @@ class PostComposer(ft.Container):
             expand=True,
             on_change=self.update_char_count
         )
+        
         self.schedule_button = ft.FilledButton(
             text="Programar",
             icon=ft.Icons.SEND,
@@ -40,6 +68,8 @@ class PostComposer(ft.Container):
         self.content = ft.Column(
             spacing=15,
             controls=[
+                self.date_picker,
+                self.time_picker,
                 ft.Row(
                     vertical_alignment=ft.CrossAxisAlignment.START,
                     controls=[
@@ -53,7 +83,13 @@ class PostComposer(ft.Container):
                         ft.Row(
                             controls=[
                                 ft.IconButton(icon=ft.Icons.IMAGE_OUTLINED, tooltip="Añadir imagen", icon_color=TEXT_SECONDARY),
-                                ft.IconButton(icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED, tooltip="Añadir emoji", icon_color=TEXT_SECONDARY)
+                                ft.IconButton(icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED, tooltip="Añadir emoji", icon_color=TEXT_SECONDARY),
+                                ft.IconButton(
+                                    icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
+                                    tooltip="Programar fecha y hora",
+                                    icon_color=TEXT_SECONDARY,
+                                    on_click=lambda e: self.page.open(self.date_picker)
+                                    )
                             ]
                         ),
                         ft.Row(
@@ -67,11 +103,32 @@ class PostComposer(ft.Container):
                 ),
                 ft.Row(
                     controls=[
+                        self.scheduled_display 
+                        ]
+                    ),
+                ft.Row(
+                    controls=[
                         self.feedback_message
                     ]
                 )
             ]
         )
+    
+    async def handle_date_change(self, e):
+        self.selected_date = e.control.value
+        print(f"Fecha seleccionada: {self.selected_date}")
+        
+        await self.page.open(self.time_picker)
+    
+    async def handle_time_change(self,e):
+        self.selected_time = e.control.value
+        print(f"Hora seleccionada: {self.selected_time}")
+        
+        final_datetime = datetime.combine(self.selected_date, self.selected_time)
+        
+        self.scheduled_display.value = f"Programado para: {final_datetime.strftime('%d de %B, %H:%M')}"
+        self.scheduled_display.visible = True
+        await self.update()
     
     def update_char_count(self,e):
         count = len(self.text_field.value)
