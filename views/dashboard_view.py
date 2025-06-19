@@ -47,14 +47,10 @@ class DashboardView(ft.Row):
         print("DashboardView.initialize() llamado. Cargando posts...")
         await self.load_queue_posts()
         
-    async def handle_schedule_click(self, content: str):
+    def handle_schedule_click(self, content: str):
         self.page_ref.run_task(self._do_schedule_and_reload, content)
     
     async def _do_schedule_and_reload(self, content: str):
-        """
-        Esta es la lógica ASÍNCRONA real. Se ejecuta en un contexto seguro
-        proporcionado por page.run_task.
-        """
         if not content or not content.strip():
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
