@@ -6,7 +6,7 @@ class PostComposer(ft.Container):
     def __init__(self, on_schedule_click):
         super().__init__()
         
-        self.on_schedule_click = on_schedule_click
+        self.on_schedule_click = on_schedule_click 
         self.bgcolor = SURFACE
         self.border = ft.border.all(1, BORDER)
         self.border_radius = 8 
@@ -27,6 +27,15 @@ class PostComposer(ft.Container):
             expand=True,
             on_change=self.update_char_count
         )
+        self.schedule_button = ft.FilledButton(
+            text="Programar",
+            icon=ft.Icons.SEND,
+            on_click=lambda e: self.on_schedule_click(self.text_field.value),
+            style=ft.ButtonStyle(
+                bgcolor=PRIMARY,
+                color=ON_PRIMARY
+                )
+            )
         
         self.content = ft.Column(
             spacing=15,
@@ -51,15 +60,8 @@ class PostComposer(ft.Container):
                             controls = [
                                 self.char_counter,
                                 ft.Container(width=10),
-                                ft.FilledButton(
-                                    text="Programar",
-                                    icon=ft.Icons.SEND,
-                                    on_click= lambda e: self.on_schedule_click(self.text_field.value),
-                                    style=ft.ButtonStyle(
-                                        bgcolor=PRIMARY,
-                                        color=ON_PRIMARY
-                                    )
-                                )]
+                                self.schedule_button
+                                ]
                         )
                     ]
                 ),
@@ -83,7 +85,8 @@ class PostComposer(ft.Container):
     def clear(self):
         self.text_field.value = ""
         self.update_char_count(None)
-        self.hide_feedback()
+        self.feedback_message.visible = False 
+        self.feedback_message.update()
         self.text_field.update()
     
     def show_feedback(self, message: str, is_error :bool= False):
@@ -96,5 +99,6 @@ class PostComposer(ft.Container):
         timer.start()
     
     def hide_feedback(self):
-        self.feedback_message.visible = True
-        self.feedback_message.update()
+        self.feedback_message.visible = False
+        if self.page:
+            self.feedback_message.update()
