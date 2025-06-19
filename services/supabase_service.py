@@ -14,7 +14,7 @@ def add_post(content: str):
             "status": "scheduled"
         }
         data, count = supabase.table("posts").insert(post_data).execute()
-        print(f"Exito, se metio los datos: {data}")
+        print(f"Exito, se metieron los datos: {data}")
         return {"success":True, "data":data}
     except Exception as e:
         print(f"Error al guardar el post: {e}")
