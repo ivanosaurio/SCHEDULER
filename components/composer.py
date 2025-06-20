@@ -68,8 +68,6 @@ class PostComposer(ft.Container):
         self.content = ft.Column(
             spacing=15,
             controls=[
-                self.date_picker,
-                self.time_picker,
                 ft.Row(
                     vertical_alignment=ft.CrossAxisAlignment.START,
                     controls=[

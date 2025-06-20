@@ -31,3 +31,16 @@ def fetch_posts():
     except Exception as e:
         print(f"Error al obtener los posts: {e}")
         return {"success": False, "error": str(e)}
+
+def delete_post (post_id: str):
+    try:
+        data, count = supabase.table("posts").delete().eq("id", post_id).execute()
+        if count:
+            print(f"Post con ID {post_id} eliminado con éxito.")
+            return {"success": True, "data": data}
+        else:
+            print(f"No se encontró ningún post con ID {post_id} para eliminar.")
+            return {"success": False, "error": "Post not found"}
+    except Exception as e:
+        print(f"Error al eliminar el post {post_id}: {e}")
+        return {"success": False, "error": str(e)}

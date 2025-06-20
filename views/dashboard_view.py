@@ -3,13 +3,12 @@ from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
-from services.supabase_service import fetch_posts, add_post
+from services.supabase_service import fetch_posts, add_post, delete_post
 from components.queue_item import QueueItem
 
 class DashboardView(ft.Row):
     def __init__(self, page: ft.Page):
         super().__init__()
-        
         #Fila principal
         self.page_ref = page
         self.expand = True
@@ -25,6 +24,9 @@ class DashboardView(ft.Row):
         
         self.post_composer = PostComposer(on_schedule_click=self.handle_schedule_click)
         self.sidebar = Sidebar(self.change_view)
+        
+        page.overlay.append(self.post_composer.date_picker)
+        page.overlay.append(self.post_composer.time_picker)
         
         self.views = {
             "Cola": self.create_queue_view(),
@@ -44,9 +46,47 @@ class DashboardView(ft.Row):
         ]
         self.page_ref.run_task(self.load_queue_posts)
     
-    async def initialize(self):
-        print("DashboardView.initialize() llamado. Cargando posts...")
-        await self.load_queue_posts()
+    def open_delete_dialog(self, e):
+        print("[DashboardView] open_delete_dialog FUE LLAMADO!")
+        post_id = e.control.data
+        
+        def handle_confirm(dlg_ref):
+            self.page_ref.run_task(self.confirm_delete, post_id, dlg_ref)
+        
+        def handle_cancel(dlg_ref):
+            self.page_ref.close(dlg_ref)
+            self.page_ref.update()
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Confirmar Eliminación"),
+            content=ft.Text("¿Estás seguro de que quieres eliminar este post?"),
+            actions_alignment=ft.MainAxisAlignment.END,
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: handle_cancel(dlg)),
+                ft.FilledButton("Eliminar", on_click=lambda _: handle_confirm(dlg))
+            ]
+        )
+        self.page_ref.open(dlg)
+        self.page_ref.update()
+    
+    async def confirm_delete(self, post_id: str, dlg: ft.AlertDialog):
+        print(f"Confirmada la eliminación del post: {post_id}")
+        
+        self.page_ref.close(dlg)
+        self.page_ref.update(
+            
+        )
+        result = delete_post(post_id)
+        
+        if result["success"]:
+            print(f"Post {post_id} eliminado con éxito de la base de datos.")
+            self.post_composer.show_feedback("Publicación eliminada correctamente.")
+            await self.load_queue_posts()
+        else:
+            error_msg = result.get('error', 'Error desconocido al eliminar.')
+            print(f"Fallo al eliminar el post: {error_msg}")
+            self.post_composer.show_feedback(f"Error: {error_msg}", is_error=True)
         
     def handle_schedule_click(self, content: str, scheduled_at: datetime | None):
         self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at)
@@ -69,6 +109,7 @@ class DashboardView(ft.Row):
     async def load_queue_posts(self):
         # 1. Mostrar estado de carga
         print("--- Iniciando load_queue_posts ---")
+        self.queue_list_view.controls.clear()
         self.queue_list_view.controls = [ft.Row([ft.ProgressRing(), ft.Text("Cargando publicaciones...")], alignment=ft.MainAxisAlignment.CENTER)]
         self.page_ref.update()
         
@@ -88,12 +129,22 @@ class DashboardView(ft.Row):
                 )
             else:
                 # Caso: éxito y hay posts
+                print(f"[DashboardView] Iniciando bucle para crear {len(posts)} items.")
                 for post in posts:
-                    self.queue_list_view.controls.append(QueueItem(post))
+                    item = QueueItem(post_data=post)
+                    
+                    item.delete_button.data = post.get("id")
+                    print(f"    -> Asignando on_click para post {post.get('id')}.")
+                    print(f"       ¿Existe self.open_delete_dialog? {hasattr(self, 'open_delete_dialog')}")
+                    print(f"       Tipo de self.open_delete_dialog: {type(self.open_delete_dialog)}")
+                    item.delete_button.on_click = self.open_delete_dialog
+                    
+                    self.queue_list_view.controls.append(item)
         else:
             # Caso: error
             self.queue_list_view.controls = [ft.Text(f"Error: {result['error']}", color=ft.Colors.RED_500)]
-        self.page.update()
+        if self.page_ref and self.page_ref.controls:
+            self.page_ref.update()
         print("--- Finalizado load_queue_posts ---")
     
     def create_queue_view(self):

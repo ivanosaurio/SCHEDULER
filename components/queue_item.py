@@ -20,6 +20,7 @@ class QueueItem(ft.Container):
     def __init__(self, post_data: dict):
         super().__init__()
         self.post_data = post_data
+        print(f"[QueueItem] Creando item para post ID: {self.post_data.get('id')}")
         
         # Estilo del contenedor principal (la tarjeta)
         self.bgcolor = ft.Colors.with_opacity(0.03, ft.Colors.WHITE)
@@ -28,6 +29,13 @@ class QueueItem(ft.Container):
         self.padding = 15
 
         # Contenido de la tarjeta
+        
+        self.delete_button = ft.IconButton(
+            icon=ft.Icons.DELETE_OUTLINE,
+            icon_size= 16,
+            tooltip="Eliminar"
+        )
+        
         self.content = ft.Column(
             spacing=10,
             controls=[
@@ -58,7 +66,7 @@ class QueueItem(ft.Container):
                         ft.Row(
                             controls=[
                                 ft.IconButton(icon=ft.Icons.EDIT_CALENDAR_OUTLINED, icon_size=16, tooltip="Editar"),
-                                ft.IconButton(icon=ft.Icons.DELETE_OUTLINE, icon_size=16, tooltip="Eliminar")
+                                self.delete_button
                             ]
                         )
                     ]
