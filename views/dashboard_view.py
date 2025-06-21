@@ -26,7 +26,8 @@ class DashboardView(ft.Row):
         
         page.overlay.extend([
             self.post_composer.date_picker,
-            self.post_composer.time_picker
+            self.post_composer.time_picker,
+            self.post_composer.file_picker
         ])
         
         self.views = {
@@ -199,15 +200,15 @@ class DashboardView(ft.Row):
             error_msg = result.get('error', 'Error desconocido al eliminar.')
             self.post_composer.show_feedback(f"Error: {error_msg}", is_error=True)
     
-    def handle_schedule_click(self, content: str, scheduled_at: datetime | None):
-        self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at)
+    def handle_schedule_click(self, content: str, scheduled_at: datetime | None, image_url: str | None):
+        self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at, image_url)
     
-    async def _do_schedule_and_reload(self, content: str, scheduled_at: datetime | None):
+    async def _do_schedule_and_reload(self, content: str, scheduled_at: datetime | None, image_url: str | None):
         if not content or not content.strip():
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
         
-        result = add_post(content, scheduled_at)
+        result = add_post(content, scheduled_at, image_url)
         
         if result.get("success"):
             self.post_composer.clear()
