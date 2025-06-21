@@ -14,22 +14,6 @@ class DashboardView(ft.Row):
         self.expand = True
         self.vertical_alignment = ft.CrossAxisAlignment.STRETCH
         
-        #Estado temporal (tiempo)
-        self.edit_selected_date  = None
-        self.edit_selected_time  = None
-        
-        self.edit_date_picker = ft.DatePicker(
-            on_change=self.handle_edit_date_change,
-            first_date=datetime.now(),
-            help_text="Selecciona una nueva fecha"
-        )
-        
-        self.edit_time_picker = ft.TimePicker(
-            on_change=self.handle_edit_time_change,
-            confirm_text="Confirmar",
-            help_text="Selecciona una nueva hora"
-        )
-        
         #Componentes
         self.queue_list_view = ft.Column(
             spacing=10,
@@ -42,9 +26,7 @@ class DashboardView(ft.Row):
         
         page.overlay.extend([
             self.post_composer.date_picker,
-            self.post_composer.time_picker,
-            self.edit_date_picker,
-            self.edit_time_picker
+            self.post_composer.time_picker
         ])
         
         self.views = {
@@ -65,19 +47,6 @@ class DashboardView(ft.Row):
         ]
         self.page_ref.run_task(self.load_queue_posts)
     
-    def handle_edit_date_change(self, e):
-        self.edit_selected_date = e.control.value
-        self.page_ref.open(self.edit_time_picker)
-    
-    def handle_edit_time_change(self, e):
-        self.edit_selected_time = e.control.value
-        
-        if self.page_ref.dialog and hasattr(self.page_ref.dialog, 'edit_scheduled_display'):
-            final_datetime = datetime.combine(self.edit_selected_date, self.edit_selected_time)
-            self.page_ref.dialog.edit_scheduled_display.value = f"Nuevo horario: {final_datetime.strftime('%d de %B, %H:%M')}"
-            self.page_ref.dialog.edit_scheduled_display.visible = True
-            self.page_ref.dialog.update()
-    
     def open_edit_dialog(self, post_data: dict):
         post_id = post_data.get("id")
         
@@ -85,6 +54,38 @@ class DashboardView(ft.Row):
         self.edit_selected_time = None
         
         original_scheduled_at = datetime.fromisoformat(post_data.get("scheduled_at"))
+        
+        selected_date =None
+        selected_time =None
+        
+        def handle_date_change(e):
+            nonlocal selected_date
+            selected_date = e.control.value
+            self.page_ref.open(time_picker)
+        
+        def handle_time_change(e):
+            nonlocal selected_time
+            selected_time = e.control.value
+            
+            if selected_date and selected_time:
+                final_datetime = datetime.combine(selected_date, selected_time)
+                edit_scheduled_display.value = f"Nuevo horario: {final_datetime.strftime('%d de %B, %H:%M')}"
+                edit_scheduled_display.visible = True
+                dlg.update()
+        
+        date_picker = ft.DatePicker(
+            on_change=handle_date_change,
+            first_date=datetime.now(),
+            help_text="Selecciona una nueva fecha"
+        )
+        
+        time_picker = ft.TimePicker(
+            on_change=handle_time_change,
+            confirm_text="Confirmar",
+            help_text="Selecciona una nueva hora"
+        )
+        
+        self.page_ref.overlay.extend([date_picker, time_picker])
         
         edit_textfield = ft.TextField(
             value=post_data.get("content"),
@@ -103,8 +104,8 @@ class DashboardView(ft.Row):
             self.page_ref.close(dlg)
             
             new_scheduled_at = original_scheduled_at
-            if self.edit_selected_date and self.edit_selected_time:
-                new_scheduled_at = datetime.combine(self.edit_selected_date, self.edit_selected_time)
+            if selected_date and selected_time:
+                new_scheduled_at = datetime.combine(selected_date, selected_time)
             
             self.page_ref.run_task(
                 self.confirm_edit,
@@ -130,7 +131,7 @@ class DashboardView(ft.Row):
                             edit_scheduled_display,
                             ft.IconButton(
                                 icon=ft.Icons.CALENDAR_MONTH,
-                                on_click=lambda _: self.page_ref.open(self.edit_date_picker),
+                                on_click=lambda _: self.page_ref.open(date_picker),
                                 tooltip="Cambiar fecha y hora"
                             )
                         ]
@@ -143,7 +144,6 @@ class DashboardView(ft.Row):
                 ft.FilledButton("Guardar Cambios", on_click=handle_confirm)
             ]
         )
-        dlg.edit_scheduled_display = edit_scheduled_display
         
         self.page_ref.open(dlg)
         self.page_ref.update()
@@ -168,12 +168,12 @@ class DashboardView(ft.Row):
         print("[DashboardView] open_delete_dialog FUE LLAMADO!")
         post_id = e.control.data
         
-        def handle_confirm(dlg_ref):
-            self.page_ref.run_task(self.confirm_delete, post_id, dlg_ref)
+        def handle_confirm(e_confirm):
+            self.page_ref.close(dlg)
+            self.page_ref.run_task(self.confirm_delete, post_id)
         
-        def handle_cancel(dlg_ref):
-            self.page_ref.close(dlg_ref)
-            self.page_ref.update()
+        def handle_cancel(e_cancel):
+            self.page_ref.close(dlg)
         
         dlg = ft.AlertDialog(
             modal=True,
@@ -187,6 +187,17 @@ class DashboardView(ft.Row):
         )
         self.page_ref.open(dlg)
         self.page_ref.update()
+    
+    async def confirm_delete(self, post_id: str):
+        print(f"Confirmada la eliminación del post: {post_id}")
+        result = delete_post(post_id)
+        
+        if result["success"]:
+            self.post_composer.show_feedback("Publicación eliminada correctamente.")
+            await self.load_queue_posts()
+        else:
+            error_msg = result.get('error', 'Error desconocido al eliminar.')
+            self.post_composer.show_feedback(f"Error: {error_msg}", is_error=True)
     
     def handle_schedule_click(self, content: str, scheduled_at: datetime | None):
         self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at)
