@@ -3,7 +3,7 @@ from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
-from services.supabase_service import fetch_posts, add_post, delete_post
+from services.supabase_service import fetch_posts, add_post, delete_post, update_post
 from components.queue_item import QueueItem
 
 class DashboardView(ft.Row):
@@ -106,6 +106,67 @@ class DashboardView(ft.Row):
             error_message = result.get('error', 'Ocurrió un error desconocido.')
             self.post_composer.show_feedback(f"Error: {error_message}", is_error=True)
     
+    def open_edit_dialog(self, post_data: dict):
+        post_id = post_data.get("id")
+        
+        edit_textfield = ft.TextField(
+            value=post_data.get("content"),
+            multiline=True,
+            min_lines=4,
+            border=ft.InputBorder.UNDERLINE,
+            hint_text="Edita tu publicación..."
+        )
+        
+        def handle_confirm(e):
+            self.page_ref.close(dlg)
+            original_scheduled_at = datetime.fromisoformat(post_data.get("scheduled_at"))
+            self.page_ref.run_task(
+                self.confirm_edit,
+                post_id,
+                edit_textfield.value,
+                original_scheduled_at
+            )
+        
+        def handle_cancel(e):
+            self.page_ref.close(dlg)
+            self.page_ref.close(dlg)
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Editar Publicación"),
+            content=ft.Column(
+                tight=True,
+                controls=[
+                    edit_textfield,
+                    ft.Text(f"ID del Post: {post_id}", italic=True, size=10, color=TEXT_SECONDARY)
+                ]
+            ),
+            actions_alignment=ft.MainAxisAlignment.END,
+            actions=[
+                ft.TextButton("Cancelar", on_click=handle_cancel),
+                ft.FilledButton("Guardar Cambios", on_click=handle_confirm)
+            ]
+        )
+        
+        self.page_ref.open(dlg)
+        self.page_ref.update()
+    
+    async def confirm_edit(self, post_id: str, new_content: str, new_scheduled_at: datetime):
+        print(f"Intentando actualizar post {post_id} con nuevo contenido: '{new_content}'")
+        
+        if not new_content or not new_content.strip():
+            self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
+            return
+        
+        result = update_post(post_id, new_content, new_scheduled_at)
+        
+        if result.get("success"):
+            self.post_composer.show_feedback("¡Publicación actualizada con éxito!")
+            await self.load_queue_posts()
+        else:
+            error_message = result.get('error', 'Ocurrió un error desconocido')
+            self.post_composer.show_feedback(f"Error: {error_message}", is_error=True)
+    
     async def load_queue_posts(self):
         # 1. Mostrar estado de carga
         print("--- Iniciando load_queue_posts ---")
@@ -131,7 +192,11 @@ class DashboardView(ft.Row):
                 # Caso: éxito y hay posts
                 print(f"[DashboardView] Iniciando bucle para crear {len(posts)} items.")
                 for post in posts:
-                    item = QueueItem(post_data=post)
+                    item = QueueItem(
+                        post_data=post,
+                        on_edit_click=self.open_edit_dialog,
+                        on_delete_click=self.open_delete_dialog
+                        )
                     
                     item.delete_button.data = post.get("id")
                     print(f"    -> Asignando on_click para post {post.get('id')}.")

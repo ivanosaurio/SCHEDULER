@@ -44,3 +44,22 @@ def delete_post (post_id: str):
     except Exception as e:
         print(f"Error al eliminar el post {post_id}: {e}")
         return {"success": False, "error": str(e)}
+
+def update_post(post_id: str, new_content: str, new_cheduled_at: datetime):
+    try:
+        update_data = {
+            "content": new_content,
+            "scheduled_at": new_cheduled_at.isoformat()
+        }
+        data, count = supabase.table("posts").update(update_data).eq("id", post_id).execute()
+        
+        if count:
+            print(f"Post con ID {post_id} actualizado con éxito")
+            return{"success": True, "data": data}
+        else:
+            print(f"No se encontró ningún post con ID {post_id} para actualizar.")
+            return{"success": False, "error": "Post not found"}
+    
+    except Exception as e:
+        print(f"Error al actualizar el post {post_id}: {e}")
+        return {"success": False, "error": str(e)}
