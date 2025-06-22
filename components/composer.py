@@ -4,6 +4,11 @@ from services.supabase_service import upload_image
 from datetime import datetime, time
 from theme import SURFACE, BORDER, PRIMARY, ON_PRIMARY, TEXT_SECONDARY, TEXT_PRIMARY
 
+EMOJI_LIST = [
+    "😀", "😂", "😍", "🤔", "😎", "😭", "🙏", "❤️", "👍", "👎",
+    "🔥", "🚀", "🎉", "💡", "💻", "✅", "✨", "👋", "💰", "📈",
+]
+
 class PostComposer(ft.Container):
     def __init__(self, on_schedule_click):
         super().__init__()
@@ -103,7 +108,12 @@ class PostComposer(ft.Container):
                                     icon_color=TEXT_SECONDARY,
                                     on_click=lambda _: self.file_picker.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gift"])
                                     ),
-                                ft.IconButton(icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED, tooltip="Añadir emoji", icon_color=TEXT_SECONDARY),
+                                ft.IconButton(
+                                    icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED,
+                                    tooltip="Añadir emoji",
+                                    icon_color=TEXT_SECONDARY,
+                                    on_click=self.open_emoji_picker
+                                    ),
                                 ft.IconButton(
                                     icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
                                     tooltip="Programar fecha y hora",
@@ -187,6 +197,50 @@ class PostComposer(ft.Container):
         self.scheduled_display.value = f"Programado para: {final_datetime.strftime('%d de %B, %H:%M')}"
         self.scheduled_display.visible = True
         self.update()
+    
+    def open_emoji_picker(self, e):
+        def handle_emoji_click(e_emoji):
+            self.text_field.value += e_emoji.control.text
+            
+            self.update_char_count(None)
+            self.page.close(dlg)
+            self.text_field.update()
+        
+        emoji_grid = ft.GridView(
+            expand=1,
+            runs_count=5,
+            max_extent=40,
+            spacing=5,
+            run_spacing=5,
+            child_aspect_ratio=1.0
+        )
+        for emoji in EMOJI_LIST:
+            emoji_grid.controls.append(
+                ft.TextButton(
+                    text=emoji,
+                    on_click=handle_emoji_click,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=8)
+                    )
+                )
+            )
+        
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Selecciona un Emoji"),
+            content=ft.Container(
+                content=emoji_grid,
+                width=300,
+                height=200
+            ),
+            actions_alignment=ft.MainAxisAlignment.END,
+            actions=[
+                ft.TextButton("Cerrar", on_click=lambda _: self.page.close(dlg))
+            ]
+        )
+        
+        self.page.open(dlg)
+        self.page.update()
     
     def update_char_count(self,e):
         count = len(self.text_field.value)
