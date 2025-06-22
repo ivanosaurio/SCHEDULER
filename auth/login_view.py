@@ -1,5 +1,5 @@
 import flet as ft
-from theme import BACKGROUND, SURFACE, PRIMARY, TEXT_PRIMARY, TEXT_SECONDARY, BORDER
+from theme import SURFACE, TEXT_PRIMARY, TEXT_SECONDARY, BORDER
 
 class LoginView(ft.Column):
     def __init__(self, on_login_submit, on_navigate_to_register):
@@ -16,6 +16,12 @@ class LoginView(ft.Column):
         self.spacing = 30
         
         #Controles
+        self.feedback_text = ft.Text(
+            value="",
+            color=ft.Colors.RED_500,
+            visible=False
+        )
+        
         self.email_field = ft.TextField(
             label="Corre Electrónico",
             width=320,
@@ -69,6 +75,7 @@ class LoginView(ft.Column):
                     ),
                     self.email_field,
                     self.password_field,
+                    self.feedback_text,
                     self.login_button,
                     ft.Divider(height=10, color="transparent"),
                     self.register_link
@@ -82,3 +89,9 @@ class LoginView(ft.Column):
         email = self.email_field.value
         password = self.password_field.value
         self.on_login_submit(email, password)
+    
+    def show_feedback(self, message: str, is_error: bool=True):
+        self.feedback_text.value = message
+        self.feedback_text.color = ft.Colors.RED_500 if is_error else ft.Colors.GREEN_500
+        self.feedback_text.visible = True
+        self.update()

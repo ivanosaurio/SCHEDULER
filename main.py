@@ -3,6 +3,7 @@ from theme import BACKGROUND, APP_THEME
 from views.dashboard_view import DashboardView
 from auth.login_view import LoginView
 from auth.register_view import RegisterView
+from services.auth_service import register_user,login_user
 
 class App:
     def __init__(self, page: ft.Page):
@@ -46,35 +47,33 @@ class App:
     
     def handle_login_submit(self, email: str, password: str):
         print(f"Intento de inicio de sesión con Email {email}, Contraseña: {'*' * len(password)}")
+        self.login_view.show_feedback("Verificando...", is_error=False)
         
-        #user =supabase.auth.sign_in(email, password)
-        #if user:
-        #   self.user_session = user
-        #   self.go_to_dashboard()
-        #   else:
-        #   Error en la UI
-        print("Simulando Login exitoso")
-        self.go_to_dashboard()
+        result = login_user(email, password)
+        
+        if result["success"]:
+            self.user_session = result["data"]
+            print("¡Inicio de sesión exitoso!")
+            self.go_to_dashboard()
+        else:
+            print(f"Error de inicio de sesión: {result['error']}")
+            self.login_view.show_feedback(result["error"])
     
     def handle_register_submit(self, email: str, password: str, confirm_password: str):
-        print(f"Intento de registro con Email: {email}, Contraseña: {'*' * len(password)}")
+        print(f"Llamando a Supabase para registrar a {email}")
+        self.register_view.show_feedback("Registrando...", is_error=False)
         
-        #if password !=confirm_password:
-        #   error que no scoinciden las contrasanas
-        #   return
+        result = register_user(email, password, confirm_password)
         
-        #user = supabase.auth_sign_up({"email": email, "password": password})
-        
-        #if user:
-        #   mensaje de exito (revisar email)
-        #   self.go_to_login
-        
-        print("Registro recibido. Llevando a la pnatalla de Login...")
-        self.go_to_login()
+        if result["success"]:
+            print("¡Registro exitoso!")
+            self.register_view.show_feedback("¡Registro exitoso! Revisa tu email para confirmar la cuenta.", is_error=False)
+        else:
+            print(f"Error de registro: {result['error']}")
+            self.register_view.show_feedback(result["error"])
 
 def main(page: ft.Page):
     app_controller = App(page)
-    
     app_controller.go_to_login()
 
 if __name__ == "__main__":

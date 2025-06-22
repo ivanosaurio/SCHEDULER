@@ -16,6 +16,12 @@ class RegisterView(ft.Column):
         self.spacing = 30
         
         #Controles
+        self.feedback_text = ft.Text(
+            value="",
+            color=ft.Colors.RED_500,
+            visible=False
+        )
+        
         self.email_field = ft.TextField(
             label="Correo Electrónico",
             hint_text="tu.nuevo.email@ejemplo.com",
@@ -73,6 +79,7 @@ class RegisterView(ft.Column):
                     self.email_field,
                     self.password_field,
                     self.confirm_password_field,
+                    self.feedback_text,
                     self.register_button,
                     ft.Divider(height=10, color="transparent"),
                     self.login_link
@@ -87,3 +94,9 @@ class RegisterView(ft.Column):
         password = self.password_field.value
         confirm_password = self.confirm_password_field.value
         self.on_register_submit(email, password, confirm_password)
+    
+    def show_feedback(self, message: str, is_error: bool=True):
+        self.feedback_text.value = message
+        self.feedback_text.color = ft.Colors.RED_500 if is_error else ft.Colors.GREEN_500
+        self.feedback_text.visible = True
+        self.update()
