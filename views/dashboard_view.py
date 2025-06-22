@@ -3,6 +3,7 @@ from datetime import datetime, time
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
+from components.placeholder import PlaceholderView
 from services.supabase_service import fetch_posts, add_post, delete_post, update_post
 from components.queue_item import QueueItem
 
@@ -292,13 +293,18 @@ class DashboardView(ft.Row):
         )
     
     def create_analytics_view(self):
-        return ft.Column(
-            controls=[ft.Text("Vista de Analíticas", size=30, style=ft.TextStyle(color=TEXT_PRIMARY))]
+        return PlaceholderView(
+            icon_name=ft.Icons.INSIGHTS,
+            title="Analíticas",
+            message="Métricas, rendimiento de posts y seguimiento de tu crecimiento. ¡Esta función estará disponible próximamente!"
         )
     
     def create_settings_view(self):
-        return ft.Column(
-            controls=[ft.Text("Vista de Configuracion", size=30, style=ft.TextStyle(color=TEXT_PRIMARY))])
+        return PlaceholderView(
+            icon_name=ft.Icons.SETTINGS,
+            title="Configuración",
+            message="Aquí podrás gestionar tus cuentas sociales conectadas, las preferencias de la aplicación y los detalles detu perfil."
+        )
     
     def change_view(self, view_name: str):
         self.main_content.content = self.views.get(view_name)

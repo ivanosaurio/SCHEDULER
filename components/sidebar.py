@@ -13,8 +13,8 @@ class Sidebar(ft.Container):
         
         self.nav_buttons = {
             "Cola": self.create_nav_button(ft.Icons.LIST_ALT, "Cola", is_activate =True),
-            "Analiticas": self.create_nav_button(ft.Icons.INSIGHTS, "Analíticas", is_activate =False),
-            "Configuracion": self.create_nav_button(ft.Icons.SETTINGS, "Configuración", is_activate =False)
+            "Analíticas": self.create_nav_button(ft.Icons.INSIGHTS, "Analíticas", is_activate =False),
+            "Configuración": self.create_nav_button(ft.Icons.SETTINGS, "Configuración", is_activate =False)
         }
         
         self.content = ft.Column(
@@ -44,7 +44,7 @@ class Sidebar(ft.Container):
             ink=True,
             #Eventos
             on_hover=self.highlight_button,
-            on_click= lambda e, text=text: self.handle_nav_click(text),
+            on_click= lambda e, view_name=text: self.handle_nav_click(view_name),
             bgcolor=PRIMARY if is_activate else "transparent",
             content= ft.Row(
                 spacing=15,
@@ -66,9 +66,9 @@ class Sidebar(ft.Container):
                     control.color = ON_PRIMARY if is_active else TEXT_PRIMARY
             button.update()
     
-    def handle_nav_click(self, text):
-        self.set_activate(text)
-        self.on_change(text)
+    def handle_nav_click(self, view_name):
+        self.set_activate(view_name)
+        self.on_change(view_name)
     
     def highlight_button(self, e):
         if e.control.bgcolor != PRIMARY:

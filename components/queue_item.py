@@ -8,6 +8,14 @@ try:
 except locale.Error:
     locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')
 
+def get_platform_details(platform_name: str) -> dict:
+    if platform_name and platform_name.lower() == "x":
+        return {"icon": ft.Icons.CLOSE, "color": "#1DA1F2"}
+    if platform_name and platform_name.lower() == "instagram":
+        return {"icon": ft.Icons.CAMERA_ALT_OUTLINED, "color": "#E1306C"}
+    
+    return {"icon": ft.Icons.COMMENT, "color": TEXT_SECONDARY}
+
 
 def format_datetime(iso_string):
     if not iso_string:
@@ -23,6 +31,10 @@ class QueueItem(ft.Container):
         self.on_edit_click = on_edit_click
         self.on_delete_click = on_delete_click
         print(f"[QueueItem] Creando item para post ID: {self.post_data.get('id')}")
+        
+        #Lógica de plataformas
+        platform_name = self.post_data.get("platform", "default")
+        platform_details = get_platform_details(platform_name)
         
         # Estilo del contenedor principal (la tarjeta)
         self.bgcolor = ft.Colors.with_opacity(0.03, ft.Colors.WHITE)
@@ -54,7 +66,11 @@ class QueueItem(ft.Container):
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
-                        ft.Icon(ft.Icons.CLOSE, color="#1DA1F2", size=20), # Icono de X/Twitter
+                        ft.Icon(
+                            name=platform_details["icon"],
+                            color=platform_details["color"],
+                            size=20
+                            ), # Icono de X/Twitter
                         ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY), radius=15)
                     ]
                 ),
