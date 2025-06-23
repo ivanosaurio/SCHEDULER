@@ -1,5 +1,13 @@
 from config import supabase
 
+def set_user_session(session_data: dict):
+    try:
+        res = supabase.auth.set_session(access_token=session_data["access_token"], refresh_token=session_data["refresh_token"])
+        return {"success": True, "data": res}
+    except Exception as e:
+        print(f"Error al restaurar la sesión: {e}")
+        return {"success": False, "error": str(e)}
+
 def register_user(email: str, password: str, confirm_password: str):
     if password != confirm_password:
         return {"success": False, "error": "Las contraseñas no coinciden"}

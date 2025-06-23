@@ -1,9 +1,10 @@
 import flet as ft
+import json
 from theme import BACKGROUND, APP_THEME
 from views.dashboard_view import DashboardView
 from auth.login_view import LoginView
 from auth.register_view import RegisterView
-from services.auth_service import register_user, login_user, logout_user
+from services.auth_service import register_user, login_user, logout_user, set_user_session
 
 class App:
     def __init__(self, page: ft.Page):
@@ -28,6 +29,23 @@ class App:
         )
         
         self.dashboard_view = None
+        
+        self.load_initial_view()
+    
+    def load_initial_view(self):
+        print("Buscando sesión de usuario guardada...")
+        saved_session_str = self.page.client_storage.get("user_session")
+        if saved_session_str:
+            session_data = json.loads(saved_session_str)
+            print("Sesión encontrada. Intentando restaurar...")
+            result = set_user_session(session_data)
+            if result.get("success"):
+                print("¡Sesión restaurada con éxito!")
+                self.user_session = result["data"]
+                self.go_to_dashboard()
+                return
+        print("No se encontró una sesión válida. Modtrando pantalla de login.")
+        self.go_to_login()
     
     def change_view(self, new_view: ft.Control):
         self.page.clean()
@@ -55,6 +73,13 @@ class App:
         if result["success"]:
             self.user_session = result["data"]
             print("¡Inicio de sesión exitoso!")
+            session_obj = {
+                "access_token": self.user_session.session.access_token,
+                "refresh_token": self.user_session.session.refresh_token
+            }
+            self.page.client_storage.set("user_session", json.dumps(session_obj))
+            print("Sesión guardada en el almacenamiento del cliente.")
+            
             self.go_to_dashboard()
         else:
             print(f"Error de inicio de sesión: {result['error']}")
@@ -75,17 +100,18 @@ class App:
     
     def handle_logout(self, e=None):
         print("Iniciando proceso de cierre de sesión...")
-        logout_user()
         
+        self.page.client_storage.remove("user_session")
+        print("Sesión eliminada del almacenamiento del cliente.")
+        
+        logout_user()
         self.user_session = None
         self.dashboard_view = None
-        
         self.go_to_login()
-        print("Cierre de sesión completado. Redirigiendo a login")
+        print("Cierre de sesión completado. Redirigiendo a login.")
 
 def main(page: ft.Page):
-    app_controller = App(page)
-    app_controller.go_to_login()
+    App(page)
 
 if __name__ == "__main__":
     ft.app(target=main)
