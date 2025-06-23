@@ -1,10 +1,11 @@
 import flet as ft
-import json
+import json, threading, time
 from theme import BACKGROUND, APP_THEME
 from views.dashboard_view import DashboardView
 from auth.login_view import LoginView
 from auth.register_view import RegisterView
 from services.auth_service import register_user, login_user, logout_user, set_user_session
+from services.scheduler_service import fetch_due_posts, update_post_status
 
 class App:
     def __init__(self, page: ft.Page):
@@ -17,6 +18,8 @@ class App:
         
         #Sesión usuario
         self.user_session = None
+        self.scheduler_thread = None
+        self.stop_scheduler_event = threading.Event()
         
         self.login_view = LoginView(
             on_login_submit=self.handle_login_submit,
@@ -42,6 +45,10 @@ class App:
             if result.get("success"):
                 print("¡Sesión restaurada con éxito!")
                 self.user_session = result["data"]
+                if not self.scheduler_thread or not self.scheduler_thread.is_alive():
+                    self.stop_scheduler_event.clear()
+                    self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
+                    self.scheduler_thread.start()
                 self.go_to_dashboard()
                 return
         print("No se encontró una sesión válida. Modtrando pantalla de login.")
@@ -64,6 +71,20 @@ class App:
             self.dashboard_view = DashboardView(self.page, user_id, on_logout=self.handle_logout)
         self.change_view(self.dashboard_view)
     
+    def run_scheduler(self):
+        while not self.stop_scheduler_event.is_set():
+            result = fetch_due_posts()
+            if result.get("success"):
+                for post in result["data"]:
+                    post_id = post.get("id")
+                    print(f"[Scheduler] Procesando post ID: {post_id}")
+                    # Aquí es donde, en el futuro, llamaríamos a la API de X/Twitter.
+                    update_post_status(post_id, "published")
+                    if self.dashboard_view:
+                        self.page.run_task(self.dashboard_view.load_queue_posts)
+            self.stop_scheduler_event.wait(60)
+        print("[Scheduler] Proceso de planificación detenido.")
+    
     def handle_login_submit(self, email: str, password: str):
         print(f"Intento de inicio de sesión con Email {email}, Contraseña: {'*' * len(password)}")
         self.login_view.show_feedback("Verificando...", is_error=False)
@@ -80,6 +101,10 @@ class App:
             self.page.client_storage.set("user_session", json.dumps(session_obj))
             print("Sesión guardada en el almacenamiento del cliente.")
             
+            if not self.scheduler_thread or not self.scheduler_thread.is_alive():
+                self.stop_scheduler_event.clear()
+                self.scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
+                self.scheduler_thread.start()
             self.go_to_dashboard()
         else:
             print(f"Error de inicio de sesión: {result['error']}")
@@ -99,6 +124,8 @@ class App:
             self.register_view.show_feedback(result["error"])
     
     def handle_logout(self, e=None):
+        print("[Scheduler] Solicitando detención del planificador...")
+        self.stop_scheduler_event.set()
         print("Iniciando proceso de cierre de sesión...")
         
         self.page.client_storage.remove("user_session")

@@ -41,7 +41,26 @@ class QueueItem(ft.Container):
         self.border = ft.border.all(1, BORDER)
         self.border_radius = 8
         self.padding = 15
-
+        
+        #Logica de publicacion
+        post_status = self.post_data.get("status", "scheduled")
+        status_indicator = None
+        
+        if post_status == "published":
+            status_indicator = ft.Row(
+                spacing=5, 
+                controls=[
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_500, size=14),
+                    ft.Text("Publicado", color=ft.Colors.GREEN_500, size=14, weight=ft.FontWeight.BOLD)
+                ]
+            )
+        else:
+            status_indicator = ft.Text(
+                value=format_datetime(self.post_data.get("scheduled_at")),
+                color=TEXT_SECONDARY,
+                size=12
+            )
+        
         # Contenido de la tarjeta
         
         self.delete_button = ft.IconButton(
@@ -58,6 +77,8 @@ class QueueItem(ft.Container):
             tooltip="Editar",
             on_click=lambda e: self.on_edit_click(self.post_data if self.on_edit_click else None)
         )
+        
+        self.edit_button.disabled = (post_status == "published")
         
         self.content = ft.Column(
             spacing=10,
@@ -85,11 +106,7 @@ class QueueItem(ft.Container):
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
-                        ft.Text(
-                            value=format_datetime(self.post_data.get("scheduled_at")),
-                            color=TEXT_SECONDARY,
-                            size=12
-                        ),
+                        status_indicator,
                         ft.Row(
                             controls=[
                                 self.edit_button,
