@@ -27,3 +27,11 @@ def login_user(email: str, password: str):
         if "Invalid login credentials" in error_message:
             return {"success": False, "error": "Correo o contraseña incorrectos."}
         return {"success": False, "error": f"Error inesperado: {error_message}"}
+
+def logout_user():
+    try:
+        supabase.auth.sign_out()
+        return {"success", True}
+    except Exception as e:
+        print(f"Error al cerrar sesión: {e}")
+        return {"success": False, "error": str(e)}

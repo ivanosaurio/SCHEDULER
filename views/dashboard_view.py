@@ -8,7 +8,7 @@ from services.supabase_service import fetch_posts, add_post, delete_post, update
 from components.queue_item import QueueItem
 
 class DashboardView(ft.Row):
-    def __init__(self, page: ft.Page, user_id: str):
+    def __init__(self, page: ft.Page, user_id: str, on_logout):
         super().__init__()
         #Fila principal
         self.page_ref = page
@@ -17,6 +17,7 @@ class DashboardView(ft.Row):
         
         #Sesion de Usuario
         self.user_id = user_id
+        self.on_logout = on_logout
         print(f"[DashoardView] Inicializado para el usuario: {self.user_id}")
         
         #Componentes
@@ -27,7 +28,7 @@ class DashboardView(ft.Row):
         )
         
         self.post_composer = PostComposer(on_schedule_click=self.handle_schedule_click)
-        self.sidebar = Sidebar(self.change_view)
+        self.sidebar = Sidebar(self.change_view, on_logout_click=self.on_logout)
         
         page.overlay.extend([
             self.post_composer.date_picker,

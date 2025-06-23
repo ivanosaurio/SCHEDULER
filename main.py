@@ -3,7 +3,7 @@ from theme import BACKGROUND, APP_THEME
 from views.dashboard_view import DashboardView
 from auth.login_view import LoginView
 from auth.register_view import RegisterView
-from services.auth_service import register_user,login_user
+from services.auth_service import register_user, login_user, logout_user
 
 class App:
     def __init__(self, page: ft.Page):
@@ -43,7 +43,7 @@ class App:
     def go_to_dashboard(self):
         if not self.dashboard_view:
             user_id = self.user_session.user.id
-            self.dashboard_view = DashboardView(self.page, user_id)
+            self.dashboard_view = DashboardView(self.page, user_id, on_logout=self.handle_logout)
         self.change_view(self.dashboard_view)
     
     def handle_login_submit(self, email: str, password: str):
@@ -72,6 +72,16 @@ class App:
         else:
             print(f"Error de registro: {result['error']}")
             self.register_view.show_feedback(result["error"])
+    
+    def handle_logout(self, e=None):
+        print("Iniciando proceso de cierre de sesión...")
+        logout_user()
+        
+        self.user_session = None
+        self.dashboard_view = None
+        
+        self.go_to_login()
+        print("Cierre de sesión completado. Redirigiendo a login")
 
 def main(page: ft.Page):
     app_controller = App(page)
