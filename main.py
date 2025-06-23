@@ -42,7 +42,8 @@ class App:
     
     def go_to_dashboard(self):
         if not self.dashboard_view:
-            self.dashboard_view = DashboardView(self.page)
+            user_id = self.user_session.user.id
+            self.dashboard_view = DashboardView(self.page, user_id)
         self.change_view(self.dashboard_view)
     
     def handle_login_submit(self, email: str, password: str):

@@ -1,5 +1,5 @@
 import flet as ft
-from datetime import datetime, time
+from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
@@ -8,12 +8,16 @@ from services.supabase_service import fetch_posts, add_post, delete_post, update
 from components.queue_item import QueueItem
 
 class DashboardView(ft.Row):
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, user_id: str):
         super().__init__()
         #Fila principal
         self.page_ref = page
         self.expand = True
         self.vertical_alignment = ft.CrossAxisAlignment.STRETCH
+        
+        #Sesion de Usuario
+        self.user_id = user_id
+        print(f"[DashoardView] Inicializado para el usuario: {self.user_id}")
         
         #Componentes
         self.queue_list_view = ft.Column(
@@ -209,7 +213,7 @@ class DashboardView(ft.Row):
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
         
-        result = add_post(content, scheduled_at, image_url)
+        result = add_post(self.user_id, content, scheduled_at, image_url)
         
         if result.get("success"):
             self.post_composer.clear()
@@ -240,9 +244,10 @@ class DashboardView(ft.Row):
         print("--- Iniciando load_queue_posts ---")
         self.queue_list_view.controls.clear()
         self.queue_list_view.controls = [ft.Row([ft.ProgressRing(), ft.Text("Cargando publicaciones...")], alignment=ft.MainAxisAlignment.CENTER)]
-        self.page_ref.update()
+        if self.page_ref.controls:
+            self.update()
         
-        result = fetch_posts()
+        result = fetch_posts(self.user_id)
         self.queue_list_view.controls.clear()
         
         # 3. Procesar el resultado

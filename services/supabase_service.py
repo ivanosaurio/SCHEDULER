@@ -1,15 +1,13 @@
-import os
 from config import supabase
 from datetime import datetime
 from urllib.parse import urlparse
-def add_post(content: str, scheduled_at: datetime = None, image_url: str = None):
+def add_post(user_id: str, content: str, scheduled_at: datetime = None, image_url: str = None):
     try:
-        placeholder_user_id = None
         platform = "X"
         schedule_time = scheduled_at if scheduled_at else datetime.now()
         
         post_data = {
-            "user_id": placeholder_user_id,
+            "user_id": user_id,
             "platform": platform,
             "content": content,
             "scheduled_at": schedule_time.isoformat(),
@@ -23,12 +21,12 @@ def add_post(content: str, scheduled_at: datetime = None, image_url: str = None)
         print(f"Error al guardar el post: {e}")
         return {"success": False, "error": str(e)}
 
-def fetch_posts():
+def fetch_posts(user_id: str):
     try:
-        query_result = supabase.table("posts").select("*").is_('user_id', None).order('scheduled_at', desc=False).execute()
+        query_result = supabase.table("posts").select("*").eq('user_id', user_id).order('scheduled_at', desc=False).execute()
         
         post_count = len(query_result.data)
-        print(f"Datos de Supabase obtenidos con éxito. Se encontraron {post_count} posts.")
+        print(f"Datos de Supabase obtenidos para el usuario{user_id}. Se encontraron {post_count} posts")
         return {"success": True, "data": query_result.data}
     
     except Exception as e:
