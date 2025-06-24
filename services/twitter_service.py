@@ -30,11 +30,13 @@ def get_twitter_access_token(handler: tweepy.OAuth1UserHandler, oauth_verifier: 
         user_info = api.verify_credentials()
         username = user_info.screen_name
         
+        profile_image_url = user_info.profile_image_url_https.replace("_normal", "")
         return {
             "success": True,
             "username": username,
             "access_token": access_token,
-            "access_token_secret": access_token_secret
+            "access_token_secret": access_token_secret,
+            "profile_image_url": profile_image_url
         }
     except Exception as e:
         print(f"[TwitterService] Error al obtener el token de acceso: {e}")

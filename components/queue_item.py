@@ -80,6 +80,15 @@ class QueueItem(ft.Container):
         
         self.edit_button.disabled = (post_status == "published")
         
+        #Logica de la foto de perfil
+        avatar_content = ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)
+        
+        account_details = self.post_data.get("account_details")
+        if account_details and account_details.get("profile_image_url"):
+            avatar_widget = ft.CircleAvatar(background_image_src = account_details.get("profile_image_url"), radius=15)
+        else:
+            avatar_widget = ft.CircleAvatar(content=avatar_content, radius=15)
+        
         self.content = ft.Column(
             spacing=10,
             controls=[
@@ -92,7 +101,7 @@ class QueueItem(ft.Container):
                             color=platform_details["color"],
                             size=20
                             ), # Icono de X/Twitter
-                        ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY), radius=15)
+                        avatar_widget
                     ]
                 ),
                 # Contenido del Post

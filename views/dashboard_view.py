@@ -133,15 +133,17 @@ class DashboardView(ft.Row):
             None,
             supabase_service.save_social_account,
             self.user_id,
-            "twitter",
+            "x",
             username,
             token_result["access_token"],
-            token_result["access_token_secret"]
+            token_result["access_token_secret"],
+            token_result["profile_image_url"]
         )
         
         if save_result.get("success"):
             self.show_feedback(f"¡Cuenta @{token_result['username']} conectada con exito!", is_error=False)
             await self.refresh_settings_view()
+            await self.load_queue_posts()
         else:
             self.show_feedback(f"Error al guardar: {save_result.get('error')}", is_error=True)
     

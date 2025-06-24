@@ -3,7 +3,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 def add_post(user_id: str, content: str, scheduled_at: datetime = None, image_url: str = None):
     try:
-        platform = "X"
+        platform = "x"
         schedule_time = scheduled_at if scheduled_at else datetime.now()
         
         post_data = {
@@ -23,12 +23,24 @@ def add_post(user_id: str, content: str, scheduled_at: datetime = None, image_ur
 
 def fetch_posts(user_id: str):
     try:
-        query_result = supabase.table("posts").select("*").eq('user_id', user_id).order('scheduled_at', desc=False).execute()
+        accounts_res = supabase.table("social_accounts").select("*").eq('user_id', user_id).execute()
         
-        post_count = len(query_result.data)
-        print(f"Datos de Supabase obtenidos para el usuario{user_id}. Se encontraron {post_count} posts")
-        return {"success": True, "data": query_result.data}
-    
+        if not accounts_res.data:
+            return {"success": True, "data": []}
+        
+        account_map = {acc['platform'].lower(): acc for acc in accounts_res.data}
+        
+        post_res = supabase.table("posts").select("*").eq('user_id', user_id).order('scheduled_at', desc=False).execute()
+        
+        for post in post_res.data:
+            platform = post.get("platform").lower()
+            if platform in account_map:
+                post['account_details'] = account_map[platform]
+        
+        post_count = len(post_res.data)
+        print(f"Datos de Supabase obtenidos para el usuario {user_id}. Se encontraron {post_count} posts.")
+        
+        return {"success": True, "data": post_res.data}
     except Exception as e:
         print(f"Error al obtener los posts: {e}")
         return {"success": False, "error": str(e)}
@@ -104,16 +116,17 @@ def upload_image(file_path: str, file_name: str):
         print(error_message)
         return {"success": False, "error": error_message}
 
-def save_social_account(user_id: str, platform: str, username: str, access_token: str, access_token_secret: str):
+def save_social_account(user_id: str, platform: str, username: str, access_token: str, access_token_secret: str, profile_image_url: str):
     try:
         account_data = {
             "user_id": user_id,
-            "platform": platform,
+            "platform": platform.lower(),
             "username": username,
             "access_token": access_token, #Encryptar
-            "access_token_secret": access_token_secret #Encryptar
+            "access_token_secret": access_token_secret, #Encryptar
+            "profile_image_url": profile_image_url
         }
-        data, count = supabase.table("social_accounts").insert(account_data).execute()
+        data, count = supabase.table("social_accounts").upsert(account_data, on_conflict="user_id, platform, username").execute()
         
         if count:
             print(f"Cuenta de {platform} @{username} guardada exitosamente para el usuario {user_id}")
