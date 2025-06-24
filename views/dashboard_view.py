@@ -1,5 +1,5 @@
 import flet as ft
-import threading
+import threading, asyncio
 from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
@@ -61,7 +61,7 @@ class DashboardView(ft.Row):
         self.views = {
             "Cola": self.create_queue_view(),
             "Analíticas": self.create_analytics_view(),
-            "Configuración": SettingsView(on_connect_twitter=self.on_connect_twitter)
+            "Configuración": ft.Container(content=ft.ProgressRing())
         }
         
         self.main_content = ft.Container(
@@ -74,10 +74,34 @@ class DashboardView(ft.Row):
             self.sidebar,
             self.main_content
         ]
-        self.page_ref.run_task(self.load_queue_posts)
+        self.page_ref.run_task(self.load_initial_data)
+    
+    async def load_initial_data(self):
+        await self.load_queue_posts()
+        await self.refresh_settings_view()
+    
+    async def refresh_settings_view(self):
+        print("[DashboardView] Refrescando la vista de configuración...")
+        
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, supabase_service.fetch_social_accounts, self.user_id)
+        
+        if result.get("success"):
+            accounts = result.get("data")
+            self.views["Configuración"] = SettingsView(
+                on_connect_twitter=self.on_connect_twitter,
+                connected_accounts=accounts
+            )
+        else:
+            self.views["Configuración"] = ft.Text(f"Error al cargar cuentas: {result.get('error')}", color="red")
+        # Si el usuario está viendo la configuración, actualiza el contenido principal
+        if self.sidebar.active_view == "Configuración":
+            self.main_content.content = self.views["Configuración"]
+            self.main_content.update()
+        print("[DashboardView] Vista de configuración refrescada.")
     
     async def process_twitter_callback(self, result: dict):
-        app_instance = self.page_ref,app_instance
+        app_instance = self.page_ref.app_instance
         
         if not result.get("success"):
             self.show_feedback(f"Error de autenticacion: {result.get('error')}", is_error=True)
@@ -88,28 +112,36 @@ class DashboardView(ft.Row):
             return
         self.show_feedback("Verificacion recibida. Obteniendo tokens finales...", is_error=False)
         
-        token_result = twitter_service.get_twitter_access_token(handler=app_instance.temp_oauth_handler, oauth_verifier=oauth_verifier)
+        loop = asyncio.get_running_loop()
+        token_result = await loop.run_in_executor(
+            None,
+            twitter_service.get_twitter_access_token,
+            app_instance.temp_oauth_handler,
+            oauth_verifier
+        )
         
         app_instance.temp_oauth_handler = None
         
         if not token_result.get("success"):
             self.show_feedback(f"Error al obtener token: {token_result.get('error')}", is_error=True)
             return
+        username = token_result["username"]
         self.show_feedback(f"¡Tokens obtenidos para @{token_result['username']}! Guardando...", is_error=False)
         
-        save_result = supabase_service.save_social_account(
-            user_id=self.user_id,
-            platform="X",
-            username=token_result["username"],
-            access_token=token_result["access_token"],
-            access_token_secret=token_result["access_token_secret"]
+        
+        save_result = await loop.run_in_executor(
+            None,
+            supabase_service.save_social_account,
+            self.user_id,
+            "twitter",
+            username,
+            token_result["access_token"],
+            token_result["access_token_secret"]
         )
         
         if save_result.get("success"):
             self.show_feedback(f"¡Cuenta @{token_result['username']} conectada con exito!", is_error=False)
-            # TODO: Actualizar la vista de configuracion para mostrar la nueva cuenta
-            if self.sidebar.active_view == "Configuración":
-                pass
+            await self.refresh_settings_view()
         else:
             self.show_feedback(f"Error al guardar: {save_result.get('error')}", is_error=True)
     

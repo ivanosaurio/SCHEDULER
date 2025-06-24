@@ -93,7 +93,7 @@ class App:
             try:
                 result = self.auth_queue.get_nowait()
                 if self.dashboard_view:
-                    await self.page.run_task(self.dashboard_view.process_twitter_callback, result)
+                    await self.dashboard_view.process_twitter_callback(result)
             except queue.Empty:
                 pass
             await asyncio.sleep(1)
