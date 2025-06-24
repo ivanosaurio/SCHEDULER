@@ -6,6 +6,7 @@ from components.composer import PostComposer
 from components.placeholder import PlaceholderView
 from services.supabase_service import fetch_posts, add_post, delete_post, update_post
 from components.queue_item import QueueItem
+from views.settings_view import SettingsView
 
 class DashboardView(ft.Row):
     def __init__(self, page: ft.Page, user_id: str, on_logout):
@@ -39,7 +40,7 @@ class DashboardView(ft.Row):
         self.views = {
             "Cola": self.create_queue_view(),
             "Analíticas": self.create_analytics_view(),
-            "Configuración": self.create_settings_view()
+            "Configuración": SettingsView()
         }
         
         self.main_content = ft.Container(
@@ -303,13 +304,6 @@ class DashboardView(ft.Row):
             icon_name=ft.Icons.INSIGHTS,
             title="Analíticas",
             message="Métricas, rendimiento de posts y seguimiento de tu crecimiento. ¡Esta función estará disponible próximamente!"
-        )
-    
-    def create_settings_view(self):
-        return PlaceholderView(
-            icon_name=ft.Icons.SETTINGS,
-            title="Configuración",
-            message="Aquí podrás gestionar tus cuentas sociales conectadas, las preferencias de la aplicación y los detalles detu perfil."
         )
     
     def change_view(self, view_name: str):
