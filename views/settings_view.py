@@ -2,8 +2,9 @@ import flet as ft
 from theme import TEXT_PRIMARY, TEXT_SECONDARY, BORDER
 
 class SettingsView(ft.Column):
-    def __init__(self):
+    def __init__(self, on_connect_twitter):
         super().__init__()
+        self.on_connect_twitter = on_connect_twitter
         
         self.spacing = 20
         self.controls = [
@@ -35,6 +36,5 @@ class SettingsView(ft.Column):
         ]
     
     def handle_connect_twitter(self, e):
-        # Por ahora, solo imprimimos un mensaje.
-        # En el siguiente paso, llamaremos a nuestro twitter_service.
-        print("[SettingsView] El usuario quiere conectar con Twitter.")
+        print("[SettingsView] El usuario quiere conectar con Twitter. Llamando al manejador principal...")
+        self.on_connect_twitter()

@@ -1,15 +1,50 @@
 import flet as ft
-import json, threading, time
+import json, threading, time, queue, http.server, socketserver, webbrowser, asyncio
+from urllib.parse import urlparse, parse_qs
 from theme import BACKGROUND, APP_THEME
 from views.dashboard_view import DashboardView
 from auth.login_view import LoginView
 from auth.register_view import RegisterView
 from services.auth_service import register_user, login_user, logout_user, set_user_session
 from services.scheduler_service import fetch_due_posts, update_post_status
+from services import twitter_service, supabase_service
+
+class CallbackHandler(http.server.BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.auth_queue = kwargs.pop("auth_queue")
+        super().__init__(*args, **kwargs)
+    
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+        if parsed_path.path == "/callback":
+            query_params = parse_qs(parsed_path.query)
+            oauth_verifier = query_params.get('oauth_verifier', None)[0]
+            
+            if oauth_verifier:
+                self.auth_queue.put({"success": True, "oauth_verifier": oauth_verifier})
+                
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<html><head><title>Autenticacion Exitosa</title></head>")
+                self.wfile.write(b"<body><p>Genial! La autenticacion con Twitter fue exitosa.</p>")
+                self.wfile.write(b"<p>Puedes cerrar esta ventana y volver a la aplicacion.</p></body></html>")
+            else:
+                error_msg = query_params.get('error_description', ["Ocurrio un error desconocido."])[0]
+                
+                self.auth_queue.put({"success": False, "error": error_msg})
+                self.send_response(400)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                self.wfile.write(f"<html><body><h1>Error</h1><p>{error_msg}</p></body></html>".encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
 
 class App:
     def __init__(self, page: ft.Page):
         self.page = page
+        self.page.app_instance = self
         self.page.title ="Social Scheduler"
         self.page.bgcolor = BACKGROUND
         self.page.theme = APP_THEME
@@ -20,6 +55,12 @@ class App:
         self.user_session = None
         self.scheduler_thread = None
         self.stop_scheduler_event = threading.Event()
+        
+        #Autenticacion
+        self.auth_queue = queue.Queue()
+        self.temp_oauth_handler = None
+        self.http_server_thread = None
+        self.start_http_server()
         
         self.login_view = LoginView(
             on_login_submit=self.handle_login_submit,
@@ -32,8 +73,43 @@ class App:
         )
         
         self.dashboard_view = None
+        self.page.run_task(self.check_auth_queue)
         
         self.load_initial_view()
+    
+    def start_http_server(self):
+        def handler_factory(*args, **kwargs):
+            return CallbackHandler(*args, auth_queue=self.auth_queue, **kwargs)
+        
+        PORT = 8080
+        httpd = socketserver.TCPServer(("", PORT), handler_factory)
+        
+        self.http_server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        self.http_server_thread.start()
+        print(f"[App] Micro-servidor HTTP iniciado en el puerto {PORT}")
+    
+    async def check_auth_queue(self):
+        while True:
+            try:
+                result = self.auth_queue.get_nowait()
+                if self.dashboard_view:
+                    await self.page.run_task(self.dashboard_view.process_twitter_callback, result)
+            except queue.Empty:
+                pass
+            await asyncio.sleep(1)
+    
+    def handle_connect_twitter(self):
+        print("[App] El usuario quiere conectar con Twitter. Obteniendo URL de autorización...")
+        result = twitter_service.get_twitter_auth_url()
+        
+        if result.get("success"):
+            self.temp_oauth_handler = result["handler"]
+            auth_url = result["auth_url"]
+            print(f"[App] URL de autorización obtenida. Abriendo en el navegador: {auth_url}")
+            self.page.launch_url(auth_url)
+        else:
+            if self.dashboard_view:
+                self.dashboard_view.show_feedback(f"Error: {result.get('error')}", is_error=True)
     
     def load_initial_view(self):
         print("Buscando sesión de usuario guardada...")
@@ -68,7 +144,7 @@ class App:
     def go_to_dashboard(self):
         if not self.dashboard_view:
             user_id = self.user_session.user.id
-            self.dashboard_view = DashboardView(self.page, user_id, on_logout=self.handle_logout)
+            self.dashboard_view = DashboardView(self.page, user_id, on_logout=self.handle_logout, on_connect_twitter=self.handle_connect_twitter)
         self.change_view(self.dashboard_view)
     
     def run_scheduler(self):

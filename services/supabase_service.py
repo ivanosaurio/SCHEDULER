@@ -103,3 +103,28 @@ def upload_image(file_path: str, file_name: str):
         error_message = f"Erro al subir la imagen: {e}"
         print(error_message)
         return {"success": False, "error": error_message}
+
+def save_social_account(user_id: str, platform: str, username: str, access_token: str, access_token_secret: str):
+    try:
+        account_data = {
+            "user_id": user_id,
+            "platform": platform,
+            "username": username,
+            "access_token": access_token, #Encryptar
+            "access_token_secret": access_token_secret #Encryptar
+        }
+        data, count = supabase.table("social_accounts").insert(account_data).execute()
+        
+        if count:
+            print(f"Cuenta de {platform} @{username} guardada exitosamente para el usuario {user_id}")
+            return {"success": True, "data": data}
+        else:
+            return {"success": False, "error": "No se pudo guardar la cuenta."}
+    except Exception as e:
+        if "duplicate key value violates unique constraint" in str(e):
+            error_msg = f"La cuenta @{username} ya está conectada."
+            print(f"[SupabaseService] Error: {error_msg}")
+            return {"success": False, "error": error_msg}
+        
+        print (f"[SupabaseService] Error al guardar la cuenta: {e}")
+        return {"success": False, "error": str(e)}

@@ -7,6 +7,7 @@ class Sidebar(ft.Container):
         
         self.on_change = on_change
         self.on_logout_click = on_logout_click
+        self.active_view = "Cola"
         self.width = 250
         self.bgcolor = SURFACE
         self.border = ft.border.only(right=ft.BorderSide(1, BORDER))
@@ -93,8 +94,12 @@ class Sidebar(ft.Container):
             button.update()
     
     def handle_nav_click(self, view_name):
+        self.active_view = view_name
+        
         self.set_activate(view_name)
         self.on_change(view_name)
+        
+        print(f"[Sidebar] Vista activa cambiada a: {self.active_view}")
     
     def highlight_button(self, e):
         if e.control.bgcolor != PRIMARY:

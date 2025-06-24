@@ -1,4 +1,5 @@
 import flet as ft
+import threading
 from datetime import datetime
 from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
@@ -7,9 +8,10 @@ from components.placeholder import PlaceholderView
 from services.supabase_service import fetch_posts, add_post, delete_post, update_post
 from components.queue_item import QueueItem
 from views.settings_view import SettingsView
+from services import twitter_service, supabase_service
 
 class DashboardView(ft.Row):
-    def __init__(self, page: ft.Page, user_id: str, on_logout):
+    def __init__(self, page: ft.Page, user_id: str, on_logout, on_connect_twitter):
         super().__init__()
         #Fila principal
         self.page_ref = page
@@ -19,7 +21,25 @@ class DashboardView(ft.Row):
         #Sesion de Usuario
         self.user_id = user_id
         self.on_logout = on_logout
+        self.on_connect_twitter = on_connect_twitter
         print(f"[DashoardView] Inicializado para el usuario: {self.user_id}")
+        
+        #Feedback
+        self.feedback_text = ft.Text(value="", color=TEXT_PRIMARY)
+        self.feedback_container = ft.Container(
+            content=self.feedback_text, # El texto va DENTRO del contenedor
+            # Propiedades de caja que antes estaban mal puestas en ft.Text:
+            padding=15,
+            bgcolor=ft.Colors.with_opacity(0.9, SURFACE),
+            border=ft.border.all(1, BORDER),
+            border_radius=8,
+            # Propiedades de posicionamiento y visibilidad:
+            visible=False,
+            bottom=20,
+            right=20,
+            animate_opacity=300, # Pequeño extra para una aparición/desaparición suave
+        )
+        self.feedback_timer = None
         
         #Componentes
         self.queue_list_view = ft.Column(
@@ -29,18 +49,19 @@ class DashboardView(ft.Row):
         )
         
         self.post_composer = PostComposer(on_schedule_click=self.handle_schedule_click)
-        self.sidebar = Sidebar(self.change_view, on_logout_click=self.on_logout)
+        self.sidebar = Sidebar(on_change=self.change_view, on_logout_click=self.on_logout)
         
         page.overlay.extend([
             self.post_composer.date_picker,
             self.post_composer.time_picker,
-            self.post_composer.file_picker
+            self.post_composer.file_picker,
+            self.feedback_container
         ])
         
         self.views = {
             "Cola": self.create_queue_view(),
             "Analíticas": self.create_analytics_view(),
-            "Configuración": SettingsView()
+            "Configuración": SettingsView(on_connect_twitter=self.on_connect_twitter)
         }
         
         self.main_content = ft.Container(
@@ -54,6 +75,67 @@ class DashboardView(ft.Row):
             self.main_content
         ]
         self.page_ref.run_task(self.load_queue_posts)
+    
+    async def process_twitter_callback(self, result: dict):
+        app_instance = self.page_ref,app_instance
+        
+        if not result.get("success"):
+            self.show_feedback(f"Error de autenticacion: {result.get('error')}", is_error=True)
+            return
+        oauth_verifier = result.get("oauth_verifier")
+        if not oauth_verifier or not app_instance.temp_oauth_handler:
+            self.show_feedback("Error interno: no se pudo completar la autenticacion.", is_error=True)
+            return
+        self.show_feedback("Verificacion recibida. Obteniendo tokens finales...", is_error=False)
+        
+        token_result = twitter_service.get_twitter_access_token(handler=app_instance.temp_oauth_handler, oauth_verifier=oauth_verifier)
+        
+        app_instance.temp_oauth_handler = None
+        
+        if not token_result.get("success"):
+            self.show_feedback(f"Error al obtener token: {token_result.get('error')}", is_error=True)
+            return
+        self.show_feedback(f"¡Tokens obtenidos para @{token_result['username']}! Guardando...", is_error=False)
+        
+        save_result = supabase_service.save_social_account(
+            user_id=self.user_id,
+            platform="X",
+            username=token_result["username"],
+            access_token=token_result["access_token"],
+            access_token_secret=token_result["access_token_secret"]
+        )
+        
+        if save_result.get("success"):
+            self.show_feedback(f"¡Cuenta @{token_result['username']} conectada con exito!", is_error=False)
+            # TODO: Actualizar la vista de configuracion para mostrar la nueva cuenta
+            if self.sidebar.active_view == "Configuración":
+                pass
+        else:
+            self.show_feedback(f"Error al guardar: {save_result.get('error')}", is_error=True)
+    
+    def show_feedback(self, message: str, is_error: bool = False):
+        print(f"[DashboardView] Mostrando feedback: '{message}'")
+        
+        # Actualizamos el texto y el color del control de texto INTERNO
+        self.feedback_text.value = message
+        self.feedback_text.color = ft.Colors.RED_400 if is_error else ft.Colors.GREEN_400
+        
+        # Hacemos visible el CONTENEDOR
+        self.feedback_container.visible = True
+        
+        # Actualizamos solo el contenedor en la UI
+        self.feedback_container.update()
+        
+        if self.feedback_timer:
+            self.feedback_timer.cancel()
+            
+        self.feedback_timer = threading.Timer(4.0, self.hide_feedback)
+        self.feedback_timer.start()
+    
+    def hide_feedback(self):
+        self.feedback_container.visible = False
+        if self.feedback_container.page:
+            self.feedback_container.update()
     
     def open_edit_dialog(self, post_data: dict):
         post_id = post_data.get("id")
