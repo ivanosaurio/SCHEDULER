@@ -144,7 +144,7 @@ def save_social_account(user_id: str, platform: str, username: str, access_token
 
 def fetch_social_accounts(user_id: str):
     try:
-        accounts = supabase.table("social_accounts").select("id, platform, username").eq("user_id", user_id).execute()
+        accounts = supabase.table("social_accounts").select("id, platform, username, profile_image_url").eq("user_id", user_id).execute()
         return {"success": True, "data": accounts.data}
     except Exception as e:
         print(f"[SupabaseService] Error al obtener las cuentas sociales: {e}")

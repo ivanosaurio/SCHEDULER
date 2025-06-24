@@ -71,7 +71,7 @@ class Sidebar(ft.Container):
             ink=True,
             #Eventos
             on_hover=self.highlight_button,
-            on_click= lambda e, view_name=text: self.handle_nav_click(view_name),
+            on_click= lambda e, view_name=text: self.page.run_task(self.handle_nav_click, view_name),
             bgcolor=PRIMARY if is_activate else "transparent",
             content= ft.Row(
                 spacing=15,
@@ -93,11 +93,11 @@ class Sidebar(ft.Container):
                     control.color = ON_PRIMARY if is_active else TEXT_PRIMARY
             button.update()
     
-    def handle_nav_click(self, view_name):
+    async def handle_nav_click(self, view_name):
         self.active_view = view_name
         
         self.set_activate(view_name)
-        self.on_change(view_name)
+        await self.on_change(view_name)
         
         print(f"[Sidebar] Vista activa cambiada a: {self.active_view}")
     

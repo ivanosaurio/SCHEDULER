@@ -22,6 +22,7 @@ class DashboardView(ft.Row):
         self.user_id = user_id
         self.on_logout = on_logout
         self.on_connect_twitter = on_connect_twitter
+        self.connected_accounts = []
         print(f"[DashoardView] Inicializado para el usuario: {self.user_id}")
         
         #Feedback
@@ -72,33 +73,41 @@ class DashboardView(ft.Row):
         
         self.controls = [
             self.sidebar,
-            self.main_content
+            self.main_content,
         ]
         self.page_ref.run_task(self.load_initial_data)
     
-    async def load_initial_data(self):
-        await self.load_queue_posts()
-        await self.refresh_settings_view()
+    def force_avatar_update(self, e):
+        print("\n--- [DEBUG] Botón de forzar actualización presionado ---")
+        test_url = "https://flet.dev/img/flet-logo.png" # Usamos una URL simple y conocida
+        if hasattr(self, 'post_composer') and self.post_composer:
+            print(f"[DEBUG] Instancia de PostComposer encontrada. ID: {id(self.post_composer)}")
+            self.post_composer.update_avatar(test_url)
+            print("[DEBUG] self.post_composer.update_avatar() ha sido llamado.")
+        else:
+            print("[DEBUG] No se encontró la instancia de self.post_composer.")
     
-    async def refresh_settings_view(self):
-        print("[DashboardView] Refrescando la vista de configuración...")
+    async def load_initial_data(self):
         
+        await self.refresh_settings_data()
+        await self.load_queue_posts()
+        await self.change_view("Cola")
+    
+    async def refresh_settings_data(self):
+        print("[DashboardView] Obteniendo datos de cuentas sociales...")
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, supabase_service.fetch_social_accounts, self.user_id)
         
         if result.get("success"):
-            accounts = result.get("data")
-            self.views["Configuración"] = SettingsView(
-                on_connect_twitter=self.on_connect_twitter,
-                connected_accounts=accounts
-            )
+            self.connected_accounts = result.get("data", [])
+            if self.connected_accounts and hasattr(self, 'post_composer'):
+                twitter_account = next((acc for acc in self.connected_accounts if acc.get("platform") == "x"), None)
+                if twitter_account:
+                    profile_url = twitter_account.get("profile_image_url")
+                    self.post_composer.update_avatar(profile_url)
         else:
-            self.views["Configuración"] = ft.Text(f"Error al cargar cuentas: {result.get('error')}", color="red")
-        # Si el usuario está viendo la configuración, actualiza el contenido principal
-        if self.sidebar.active_view == "Configuración":
-            self.main_content.content = self.views["Configuración"]
-            self.main_content.update()
-        print("[DashboardView] Vista de configuración refrescada.")
+            self.connected_accounts = []
+            self.show_feedback(f"Error al cargar cuentas: {result.get('error')}", is_error=True)
     
     async def process_twitter_callback(self, result: dict):
         app_instance = self.page_ref.app_instance
@@ -126,8 +135,7 @@ class DashboardView(ft.Row):
             self.show_feedback(f"Error al obtener token: {token_result.get('error')}", is_error=True)
             return
         username = token_result["username"]
-        self.show_feedback(f"¡Tokens obtenidos para @{token_result['username']}! Guardando...", is_error=False)
-        
+        self.show_feedback(f"¡Tokens obtenidos para @{username}! Guardando...", is_error=False)
         
         save_result = await loop.run_in_executor(
             None,
@@ -142,8 +150,10 @@ class DashboardView(ft.Row):
         
         if save_result.get("success"):
             self.show_feedback(f"¡Cuenta @{token_result['username']} conectada con exito!", is_error=False)
-            await self.refresh_settings_view()
-            await self.load_queue_posts()
+            if hasattr(self, 'post_composer'):
+                self.post_composer.update_avatar(token_result.get("profile_image_url"))
+            await self.refresh_settings_data()
+            await self.sidebar.on_change("Configuración")
         else:
             self.show_feedback(f"Error al guardar: {save_result.get('error')}", is_error=True)
     
@@ -422,6 +432,22 @@ class DashboardView(ft.Row):
             message="Métricas, rendimiento de posts y seguimiento de tu crecimiento. ¡Esta función estará disponible próximamente!"
         )
     
-    def change_view(self, view_name: str):
-        self.main_content.content = self.views.get(view_name)
+    async def change_view(self, view_name: str):
+        self.sidebar.set_activate(view_name)
+        self.page_ref.overlay.clear()
+        self.page_ref.overlay.append(self.feedback_container)
+        view_content = ft.Container(content=ft.ProgressRing(), alignment=ft.alignment.center, expand=True)
+        self.main_content.content = view_content
+        self.main_content.update()
+        
+        if view_name == "Cola":
+            self.main_content.content = self.create_queue_view()
+        elif view_name == "Configuración":
+            self.main_content.content = SettingsView(
+                on_connect_twitter=self.on_connect_twitter,
+                connected_accounts=self.connected_accounts
+            )
+        elif view_name == "Analíticas":
+            self.main_content.content = self.create_analytics_view()
+        
         self.main_content.update()

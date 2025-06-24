@@ -10,7 +10,7 @@ EMOJI_LIST = [
 ]
 
 class PostComposer(ft.Container):
-    def __init__(self, on_schedule_click):
+    def __init__(self, on_schedule_click, profile_image_url: str=None):
         super().__init__()
         
         self.on_schedule_click = on_schedule_click 
@@ -30,6 +30,14 @@ class PostComposer(ft.Container):
         self.feedback_message = ft.Text(value="", color=ft.Colors.GREEN_700, visible=False)
         
         #Elementos UI
+        
+        self.avatar = ft.CircleAvatar(
+            content=ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)
+        )
+        
+        if profile_image_url:
+            self.avatar.foreground_image_src = profile_image_url
+            self.avatar.content = None
         
         self.date_picker = ft.DatePicker(
             on_change=self.handle_date_change,
@@ -93,7 +101,7 @@ class PostComposer(ft.Container):
                 ft.Row(
                     vertical_alignment=ft.CrossAxisAlignment.START,
                     controls=[
-                        ft.CircleAvatar(content=ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)),
+                        self.avatar,
                         self.text_field
                     ]
                 ),
@@ -144,6 +152,26 @@ class PostComposer(ft.Container):
                 )
             ]
         )
+    
+    def update_avatar(self, profile_image_url: str | None):
+        """
+        Actualiza el avatar del compositor con una nueva URL de imagen.
+        Si la URL es None, vuelve al icono de persona por defecto.
+        """
+        print(f"[Composer] Actualizando avatar con URL: {profile_image_url}")
+        if profile_image_url:
+            self.avatar.foreground_image_src = profile_image_url
+            self.avatar.content = None  # Quitamos el icono si hay imagen
+        else:
+            self.avatar.background_image_src = None
+            self.avatar.content = ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)
+        
+        # Es crucial actualizar el control para que el cambio se refleje en la UI
+        if self.page:
+            print(f"[Composer] self.page existe. Intentando self.update() para redibujar todo el compositor.")
+            self.update() # <-- Actualiza el PostComposer completo
+        else:
+            print("[Composer] ADVERTENCIA: self.page es None. No se puede llamar a update().")
     
     async def handle_file_pick_result(self, e: ft.FilePickerResultEvent):
         if e.files:
