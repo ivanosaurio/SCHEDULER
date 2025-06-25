@@ -54,6 +54,15 @@ class QueueItem(ft.Container):
                     ft.Text("Publicado", color=ft.Colors.GREEN_500, size=14, weight=ft.FontWeight.BOLD)
                 ]
             )
+        
+        elif post_status == "error":
+            status_indicator = ft.Row(
+                spacing=5,
+                controls=[
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.RED_500, size=14),
+                    ft.Text("Error al publicar", color=ft.Colors.RED_500, size=14, weight=ft.FontWeight.BOLD)
+                ]
+            )
         else:
             status_indicator = ft.Text(
                 value=format_datetime(self.post_data.get("scheduled_at")),
@@ -78,7 +87,8 @@ class QueueItem(ft.Container):
             on_click=lambda e: self.on_edit_click(self.post_data if self.on_edit_click else None)
         )
         
-        self.edit_button.disabled = (post_status == "published")
+        self.delete_button.disabled = (post_status in ["published", "error"])
+        self.edit_button.disabled = (post_status in ["published", "error"])
         
         #Logica de la foto de perfil
         avatar_content = ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)

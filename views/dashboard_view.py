@@ -442,6 +442,11 @@ class DashboardView(ft.Row):
         
         if view_name == "Cola":
             self.main_content.content = self.create_queue_view()
+            self.page_ref.overlay.extend([
+                self.post_composer.date_picker,
+                self.post_composer.time_picker,
+                self.post_composer.file_picker
+                ])
         elif view_name == "Configuración":
             self.main_content.content = SettingsView(
                 on_connect_twitter=self.on_connect_twitter,

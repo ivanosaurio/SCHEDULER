@@ -7,6 +7,7 @@ from auth.login_view import LoginView
 from auth.register_view import RegisterView
 from services.auth_service import register_user, login_user, logout_user, set_user_session
 from services.scheduler_service import fetch_due_posts, update_post_status
+from services.supabase_service import fetch_social_accounts
 from services import twitter_service, supabase_service
 
 class CallbackHandler(http.server.BaseHTTPRequestHandler):
@@ -212,6 +213,59 @@ class App:
         self.dashboard_view = None
         self.go_to_login()
         print("Cierre de sesión completado. Redirigiendo a login.")
+    
+    def run_scheduler(self):
+        print("[Scheduler] Proceso de planificación iniciado.")
+        while not self.stop_scheduler_event.is_set():
+            result = fetch_due_posts()
+            
+            if result.get("success") and result["data"]:
+                due_posts = result["data"]
+                print(f"[Scheduler] Se encontraron {len(due_posts)} posts pendientes.")
+                
+                for post in due_posts:
+                    post_id = post.get("id")
+                    user_id = post.get("user_id")
+                    platform = post.get("platform")
+                    
+                    print(f"[Scheduler] Procesando post ID: {post_id} para la plataforma: {platform}")
+                    
+                    account_result= supabase_service.fetch_social_accounts(user_id)
+                    
+                    if not account_result.get("success"):
+                        error_msg = f"No se pudieron obtener las cuentas sociales para el usuario {user_id}."
+                        print(f"[Scheduler] {error_msg}")
+                        update_post_status(post_id, "error", error_msg)
+                        continue
+                    
+                    target_account = next((acc for acc in account_result.get("data", []) if acc.get("platform") == platform), None)
+                    
+                    if not target_account:
+                        error_msg = f"No se encontró una cuenta conectada de '{platform}' para el post {post_id}."
+                        print(f"[Scheduler] {error_msg}")
+                        update_post_status(post_id, "error", error_msg)
+                        continue
+                    
+                    if platform == "x":
+                        publish_result = twitter_service.publish_post_to_twitter(post, target_account)
+                        if publish_result.get("success"):
+                            print(f"[Scheduler] Post {post_id} publicado con éxito en Twitter.")
+                            update_post_status(post_id, "published")
+                        else:
+                            error_msg = publish_result.get("error", "Error desconocido al publicar.")
+                            print(f"[Scheduler] Fallo al publicar post {post_id}: {error_msg}")
+                            update_post_status(post_id, "error", error_msg)
+                    else:
+                        error_msg = f"Plataforma '{platform}' no soportada para publicación."
+                        print(f"[Scheduler] {error_msg}")
+                        update_post_status(post_id, "error", error_msg)
+                    
+                    if self.dashboard_view:
+                        self.page.run_task(self.dashboard_view.load_queue_posts)
+            
+            self.stop_scheduler_event.wait(60)
+        
+        print("[Scheduler] Proceso de planificación detenido.")
 
 def main(page: ft.Page):
     App(page)
