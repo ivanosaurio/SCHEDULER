@@ -43,6 +43,7 @@ def get_twitter_access_token(handler: tweepy.OAuth1UserHandler, oauth_verifier: 
         return {"success": False, "error": str(e)}
 
 def publish_post_to_twitter(post_data: dict, account_data: dict):
+    temp_file = None
     try:
         content = post_data.get("content")
         image_url = post_data.get("image_url")
@@ -69,16 +70,16 @@ def publish_post_to_twitter(post_data: dict, account_data: dict):
             response = requests.get(image_url, stream=True)
             response.raise_for_status()
             
-            with tempfile.NamedTemporaryFile(delete=True, suffix=".jpg") as temp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
                 for chunk in response.iter_content(chunk_size=8192):
                     temp_file.write(chunk)
-                temp_file.seek(0)
+                temp_filename = temp_file.name
                 
-                print(f"[TwitterService] Imagen descargada en archivo temporal. Subiendo a Twitter...")
-                
-                media = api_v1.media_upload(filename=temp_file.name)
-                media_id = media.media_id
-                print(f"[TwitterService] Imagen subida. Media ID: {media_id}")
+            print(f"[TwitterService] Imagen descargada en archivo temporal. Subiendo a Twitter...")
+            
+            media = api_v1.media_upload(filename=temp_filename)
+            media_id = media.media_id
+            print(f"[TwitterService] Imagen subida. Media ID: {media_id}")
         
         tweet_params = {"text": content}
         if media_id:
@@ -94,3 +95,8 @@ def publish_post_to_twitter(post_data: dict, account_data: dict):
         error_message = f"Error al publicar en Twitter: {e}"
         print(error_message)
         return {"success": False, "error": error_message}
+    
+    finally:
+        if temp_filename and os.path.exists(temp_filename):
+            print(f"[TwitterService] Limpiando archivo temporal: {temp_filename}")
+            os.remove(temp_filename)
