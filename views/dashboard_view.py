@@ -5,7 +5,6 @@ from theme import SURFACE, BORDER, TEXT_PRIMARY, TEXT_SECONDARY
 from components.sidebar import Sidebar
 from components.composer import PostComposer
 from components.placeholder import PlaceholderView
-from services.supabase_service import fetch_posts, add_post, delete_post, update_post
 from components.queue_item import QueueItem
 from views.settings_view import SettingsView
 from services import twitter_service, supabase_service
@@ -49,7 +48,9 @@ class DashboardView(ft.Row):
             scroll=ft.ScrollMode.ADAPTIVE
         )
         
-        self.post_composer = PostComposer(on_schedule_click=self.handle_schedule_click)
+        self.post_composer = PostComposer(
+            on_schedule_click=self.handle_schedule_post_click,
+            on_thread_schedule_click=self.handle_schedule_thread_click)
         self.sidebar = Sidebar(on_change=self.change_view, on_logout_click=self.on_logout)
         
         page.overlay.extend([
@@ -77,15 +78,27 @@ class DashboardView(ft.Row):
         ]
         self.page_ref.run_task(self.load_initial_data)
     
-    def force_avatar_update(self, e):
-        print("\n--- [DEBUG] Botón de forzar actualización presionado ---")
-        test_url = "https://flet.dev/img/flet-logo.png" # Usamos una URL simple y conocida
-        if hasattr(self, 'post_composer') and self.post_composer:
-            print(f"[DEBUG] Instancia de PostComposer encontrada. ID: {id(self.post_composer)}")
-            self.post_composer.update_avatar(test_url)
-            print("[DEBUG] self.post_composer.update_avatar() ha sido llamado.")
+    def handle_schedule_thread_click(self, scheduled_at: datetime, posts_content: list[str]):
+        self.page_ref.run_task(self._do_schedule_and_reload, scheduled_at, posts_content)
+    
+    async def do_schedule_thread_and_reload(self, scheduled_at: datetime, posts_content: list[str]):
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            supabase_service.add_thread,
+            self.user_id,
+            "x", #plataforma harcodeada por ahora
+            scheduled_at,
+            posts_content
+        )
+        
+        if result.get("success"):
+            self.post_composer.clear()
+            self.show_feedback("¡Hilo programado con éxito!")
+            await self.load_queue_posts()
         else:
-            print("[DEBUG] No se encontró la instancia de self.post_composer.")
+            error_message = result.get('error', 'Ocurrió un error desconocido.')
+            self.show_feedback(f"Error: {error_message}", is_error=True)
     
     async def load_initial_data(self):
         
@@ -182,6 +195,9 @@ class DashboardView(ft.Row):
             self.feedback_container.update()
     
     def open_edit_dialog(self, post_data: dict):
+        if post_data.get("thread_id"):
+            self.show_feedback("La edición de hilos completos estará disponible pronto.", is_error=True)
+            return
         post_id = post_data.get("id")
         
         self.edit_selected_date = None
@@ -288,15 +304,16 @@ class DashboardView(ft.Row):
         if not new_content or not new_content.strip():
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
-        result = update_post(post_id, new_content, new_scheduled_at)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, supabase_service.update_post, post_id, new_content, new_scheduled_at)
         
         if result.get("success"):
-            self.post_composer.show_feedback("¡Publicación actualizada con éxito!")
+            self.show_feedback("¡Publicación actualizada con éxito!")
             
             await self.load_queue_posts()
         else:
             error_message  = result.get('error', 'Ocurrió un error desconocido.')
-            self.post_composer.show_feedback(f"Error: {error_message}", is_error=True)
+            self.show_feedback(f"Error: {error_message}", is_error=True)
     
     def open_delete_dialog(self, e):
         print("[DashboardView] open_delete_dialog FUE LLAMADO!")
@@ -324,7 +341,8 @@ class DashboardView(ft.Row):
     
     async def confirm_delete(self, post_id: str):
         print(f"Confirmada la eliminación del post: {post_id}")
-        result = delete_post(post_id)
+        loop = asyncio.get_running_loop()
+        result = loop.run_in_executor(None, supabase_service.delete_post, post_id)
         
         if result["success"]:
             self.post_composer.show_feedback("Publicación eliminada correctamente.")
@@ -333,23 +351,26 @@ class DashboardView(ft.Row):
             error_msg = result.get('error', 'Error desconocido al eliminar.')
             self.post_composer.show_feedback(f"Error: {error_msg}", is_error=True)
     
-    def handle_schedule_click(self, content: str, scheduled_at: datetime | None, image_url: str | None):
+    def handle_schedule_post_click(self, content: str, scheduled_at: datetime | None, image_url: str | None):
         self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at, image_url)
     
     async def _do_schedule_and_reload(self, content: str, scheduled_at: datetime | None, image_url: str | None):
-        if not content or not content.strip():
-            self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
-            return
-        
-        result = add_post(self.user_id, content, scheduled_at, image_url)
+        result = await self.page_ref.run_in_executor(
+            None,
+            supabase_service.add_post,
+            self.user_id,
+            content,
+            scheduled_at,
+            image_url
+        )
         
         if result.get("success"):
             self.post_composer.clear()
-            self.post_composer.show_feedback("¡Publicación programada con éxito!")
+            self.show_feedback("¡Publicación programada con éxito!")
             await self.load_queue_posts()
         else:
             error_message = result.get('error', 'Ocurrió un error desconocido.')
-            self.post_composer.show_feedback(f"Error: {error_message}", is_error=True)
+            self.show_feedback(f"Error: {error_message}", is_error=True)
     
     async def confirm_edit(self, post_id: str, new_content: str, new_scheduled_at: datetime):
         print(f"Intentando actualizar post {post_id} con nuevo contenido: '{new_content}'")
@@ -375,14 +396,16 @@ class DashboardView(ft.Row):
         if self.page_ref.controls:
             self.update()
         
-        result = fetch_posts(self.user_id)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            supabase_service.fetch_posts, self.user_id
+        )
         self.queue_list_view.controls.clear()
         
-        # 3. Procesar el resultado
         if result["success"]:
             posts = result["data"]
             if not posts:
-                # Caso: éxito, pero no hay posts
                 self.queue_list_view.controls.append(
                     ft.Container(
                         padding=20,
@@ -390,27 +413,18 @@ class DashboardView(ft.Row):
                     )
                 )
             else:
-                # Caso: éxito y hay posts
                 print(f"[DashboardView] Iniciando bucle para crear {len(posts)} items.")
                 for post in posts:
                     item = QueueItem(
                         post_data=post,
                         on_edit_click=self.open_edit_dialog,
                         on_delete_click=self.open_delete_dialog
-                        )
-                    
-                    item.delete_button.data = post.get("id")
-                    print(f"    -> Asignando on_click para post {post.get('id')}.")
-                    print(f"       ¿Existe self.open_delete_dialog? {hasattr(self, 'open_delete_dialog')}")
-                    print(f"       Tipo de self.open_delete_dialog: {type(self.open_delete_dialog)}")
-                    item.delete_button.on_click = self.open_delete_dialog
-                    
+                    )
                     self.queue_list_view.controls.append(item)
         else:
-            # Caso: error
             self.queue_list_view.controls = [ft.Text(f"Error: {result['error']}", color=ft.Colors.RED_500)]
         if self.page_ref and self.page_ref.controls:
-            self.page_ref.update()
+            self.update()
         print("--- Finalizado load_queue_posts ---")
     
     def create_queue_view(self):
@@ -436,8 +450,11 @@ class DashboardView(ft.Row):
         self.sidebar.set_activate(view_name)
         self.page_ref.overlay.clear()
         self.page_ref.overlay.append(self.feedback_container)
-        view_content = ft.Container(content=ft.ProgressRing(), alignment=ft.alignment.center, expand=True)
-        self.main_content.content = view_content
+        self.main_content.content = ft.Container(
+            expand=True,
+            alignment=ft.alignment.center,
+            content=ft.ProgressRing()
+            )
         self.main_content.update()
         
         if view_name == "Cola":
@@ -448,6 +465,7 @@ class DashboardView(ft.Row):
                 self.post_composer.file_picker
                 ])
         elif view_name == "Configuración":
+            await self.refresh_settings_data()
             self.main_content.content = SettingsView(
                 on_connect_twitter=self.on_connect_twitter,
                 connected_accounts=self.connected_accounts

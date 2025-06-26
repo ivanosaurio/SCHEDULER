@@ -1,6 +1,6 @@
 import flet as ft
-import threading, uuid
-from services.supabase_service import upload_image
+import threading, uuid, asyncio
+from services import supabase_service
 from datetime import datetime, time
 from theme import SURFACE, BORDER, PRIMARY, ON_PRIMARY, TEXT_SECONDARY, TEXT_PRIMARY
 
@@ -10,14 +10,20 @@ EMOJI_LIST = [
 ]
 
 class PostComposer(ft.Container):
-    def __init__(self, on_schedule_click, profile_image_url: str=None):
+    def __init__(self, on_schedule_click, on_thread_schedule_click, profile_image_url: str=None):
         super().__init__()
         
         self.on_schedule_click = on_schedule_click 
+        self.on_thread_schedule_click = on_thread_schedule_click
         self.uploaded_image_url = None
-        
         self.selected_date = None
         self.selected_time = None
+        
+        #Hilo
+        self.is_thread_mode = False
+        self.thread_inputs_container = ft.Column(spacing=10)
+        self.thread_text_fields = []
+        
         #Diseno del container
         self.bgcolor = SURFACE
         self.border = ft.border.all(1, BORDER)
@@ -59,7 +65,7 @@ class PostComposer(ft.Container):
             visible=False
         )
         
-        self.text_field = ft.TextField(
+        self.single_tweet_textfield = ft.TextField(
             multiline=True,
             min_lines=4,
             border=ft.InputBorder.NONE,
@@ -67,7 +73,26 @@ class PostComposer(ft.Container):
             hint_style=ft.TextStyle(color=TEXT_SECONDARY),
             text_style=ft.TextStyle(color=TEXT_PRIMARY, font_family="Roboto"),
             expand=True,
-            on_change=self.update_char_count
+            on_change=lambda e: self.update_main_char_counter()
+        )
+        
+        self.composer_content_area = ft.Column(
+            controls=[
+                ft.Row(
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                    controls=[
+                        self.avatar,
+                        self.single_tweet_textfield
+                    ]
+                )
+            ]
+        )
+        
+        self.add_to_thread_button = ft.IconButton(
+            icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
+            tooltip="Añadir Tweet al Hilo",
+            on_click=self.add_tweet_to_thread,
+            icon_color=TEXT_SECONDARY
         )
         
         self.image_indicator = ft.Row(
@@ -98,13 +123,7 @@ class PostComposer(ft.Container):
         self.content = ft.Column(
             spacing=15,
             controls=[
-                ft.Row(
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    controls=[
-                        self.avatar,
-                        self.text_field
-                    ]
-                ),
+                self.composer_content_area,
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
@@ -114,62 +133,135 @@ class PostComposer(ft.Container):
                                     icon=ft.Icons.IMAGE_OUTLINED,
                                     tooltip="Añadir imagen",
                                     icon_color=TEXT_SECONDARY,
-                                    on_click=lambda _: self.file_picker.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gift"])
-                                    ),
+                                    on_click=lambda _:self.file_picker.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif"])
+                                ),
                                 ft.IconButton(
                                     icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED,
                                     tooltip="Añadir emoji",
                                     icon_color=TEXT_SECONDARY,
                                     on_click=self.open_emoji_picker
-                                    ),
+                                ),
                                 ft.IconButton(
                                     icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
-                                    tooltip="Programar fecha y hora",
+                                    tooltip="Añadir emoji",
                                     icon_color=TEXT_SECONDARY,
                                     on_click=lambda e: self.page.open(self.date_picker)
-                                    )
+                                ),
+                                self.add_to_thread_button
                             ]
                         ),
                         ft.Row(
-                            controls = [
+                            controls=[
                                 self.char_counter,
                                 ft.Container(width=10),
                                 self.schedule_button
-                                ]
-                        )
-                    ]
-                ),
-                self.image_indicator,
-                ft.Row(
-                    controls=[
-                        self.scheduled_display 
-                        ]
-                    ),
-                ft.Row(
-                    controls=[
-                        self.feedback_message
+                            ]
+                        ),
+                        self.image_indicator,
+                        ft.Row(controls=[self.scheduled_display]),
+                        ft.Row(controls=[self.feedback_message])
                     ]
                 )
             ]
         )
     
+    def create_thread_tweet_input(self, content=""):
+        char_counter = ft.Text("0/280", color=TEXT_SECONDARY, size=12)
+        text_field = ft.TextField(
+            value=content,
+            multiline=True,
+            min_lines=2,
+            border=ft.InputBorder.UNDERLINE,
+            hint_text="Añade otro tweet...",
+            hint_style=ft.TextStyle(color=TEXT_SECONDARY),
+            text_style=ft.TextStyle(color=TEXT_PRIMARY),
+            on_change=lambda e: self.update_char_count(e.control.value, char_counter),
+            expand=True
+        )
+        
+        self.thread_text_fields.append(text_field)
+        
+        input_row = ft.Row(
+            vertical_alignment=ft.CrossAxisAlignment.START,
+            controls=[
+                ft.Column(
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    width=40,
+                    controls=[
+                        ft.Icon(ft.Icons.MORE_VERT, color=BORDER)
+                    ]
+                ),
+                ft.Column(
+                    expand=True,
+                    controls=[
+                        text_field,
+                        ft.Row([char_counter], alignment=ft.MainAxisAlignment.END)
+                    ]
+                ),
+                ft.IconButton(
+                    icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+                    on_click=lambda e: self.remove_tweet_from_thread(input_row),
+                    icon_color=TEXT_SECONDARY,
+                    tooltip="Eliminar Tweet"
+                )
+            ]
+        )
+        
+        self.update_char_count(content, char_counter)
+        return input_row
+    
+    def add_tweet_to_thread(self, e):
+        if not self.is_thread_mode:
+            self.is_thread_mode = True
+            
+            first_tweet_content = self.single_tweet_textfield.value
+            
+            self.composer_content_area.controls.clear()
+            self.composer_content_area.controls.append(self.thread_inputs_container)
+            self.thread_text_fields.clear()
+            self.thread_inputs_container.controls.clear()
+            
+            self.thread_inputs_container.controls.append(self.create_thread_tweet_input(first_tweet_content))
+            self.thread_inputs_container.controls.append(self.create_thread_tweet_input())
+            self.update_main_char_counter()
+        else:
+            self.thread_inputs_container.controls.append(self.create_thread_tweet_input())
+            self.update()
+    
+    def remove_tweet_from_thread(self, row_to_remove: ft.Row):
+        textfield_to_remove = row_to_remove.controls[1].controls[0]
+        if textfield_to_remove in self.thread_text_fields:
+            self.thread_text_fields.remove(textfield_to_remove)
+        
+        self.thread_inputs_container.controls.remove(row_to_remove)
+        
+        if len(self.thread_text_fields) < 2:
+            self.is_thread_mode = False
+            last_content = self.thread_text_fields[0].value if self.thread_text_fields else ""
+            self.composer_content_area.controls.clear()
+            self.single_tweet_textfield.value = last_content
+            self.composer_content_area.controls.append(
+                ft.Row(
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                    controls=[self.avatar, self.single_tweet_textfield]
+                )
+            )
+            self.thread_text_fields.clear()
+        
+        self.update_main_char_counter()
+        self.update()
+    
     def update_avatar(self, profile_image_url: str | None):
-        """
-        Actualiza el avatar del compositor con una nueva URL de imagen.
-        Si la URL es None, vuelve al icono de persona por defecto.
-        """
         print(f"[Composer] Actualizando avatar con URL: {profile_image_url}")
         if profile_image_url:
             self.avatar.foreground_image_src = profile_image_url
-            self.avatar.content = None  # Quitamos el icono si hay imagen
+            self.avatar.content = None
         else:
             self.avatar.background_image_src = None
             self.avatar.content = ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)
-        
-        # Es crucial actualizar el control para que el cambio se refleje en la UI
         if self.page:
             print(f"[Composer] self.page existe. Intentando self.update() para redibujar todo el compositor.")
-            self.update() # <-- Actualiza el PostComposer completo
+            self.update()
         else:
             print("[Composer] ADVERTENCIA: self.page es None. No se puede llamar a update().")
     
@@ -181,7 +273,8 @@ class PostComposer(ft.Container):
             
             unique_filename = f"{uuid.uuid4()}_{selected_file.name}"
             
-            result = upload_image(file_path=selected_file.path, file_name=unique_filename)
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, supabase_service.upload_image, selected_file.path, unique_filename)
             
             if result.get("success"):
                 self.uploaded_image_url = result.get("url")
@@ -199,16 +292,24 @@ class PostComposer(ft.Container):
         self.show_feedback("Imagen quitada")
         self.update()
     
-    async def schedule_button_clicked(self, e):
+    def schedule_button_clicked(self, e):
         final_datetime = None
         if self.selected_date and self.selected_time:
             final_datetime = datetime.combine(self.selected_date, self.selected_time)
-        
-        self.on_schedule_click(
-            self.text_field.value,
-            final_datetime,
-            self.uploaded_image_url
-            )
+        if self.is_thread_mode:
+            posts_content = [tf.value for tf in self.thread_text_fields if tf.value.strip()]
+            if len(posts_content) < 2:
+                self.show_feedback("Error: Un hilo debe tener al menos dos tweets.", is_error=True)
+                return
+            print(f"Programando hilo con {len(posts_content)} tweets para las {final_datetime}")
+            self.on_thread_schedule_click(final_datetime, posts_content)
+        else:
+            content = self.single_tweet_textfield.value
+            if not content.strip():
+                self.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
+                return
+            print(f"Programando post individual para las {final_datetime}")
+            self.on_schedule_click(content, final_datetime, self.uploaded_image_url)
     
     def handle_date_change(self, e):
         self.selected_date = e.control.value
@@ -228,11 +329,18 @@ class PostComposer(ft.Container):
     
     def open_emoji_picker(self, e):
         def handle_emoji_click(e_emoji):
-            self.text_field.value += e_emoji.control.text
-            
-            self.update_char_count(None)
+            target_field = self.thread_text_fields[-1] if self.is_thread_mode else self.single_tweet_textfield
+            target_field.value += e_emoji.control.text
             self.page.close(dlg)
-            self.text_field.update()
+            target_field.update()
+            
+            if self.is_thread_mode:
+                mini_composer_row = self.thread_inputs_container.controls[-1]
+                char_counter = mini_composer_row.controls[1].controls[1].controls[0]
+                self.update_char_count(target_field.value, char_counter)
+            else:
+                self.update_char_count(target_field.value, self.char_counter)
+            target_field.update()
         
         emoji_grid = ft.GridView(
             expand=1,
@@ -270,25 +378,48 @@ class PostComposer(ft.Container):
         self.page.open(dlg)
         self.page.update()
     
-    def update_char_count(self,e):
-        count = len(self.text_field.value)
-        self.char_counter.value = f"{count}/280"
+    def update_char_count(self, text_value: str, char_counter_control: ft.Text):
+        count = len(text_value)
+        char_counter_control.value = f"{count}/280"
         if count > 280:
-            self.char_counter.color = ft.Colors.RED_500
+            char_counter_control.color = ft.Colors.RED_500
         else:
             self.char_counter.color = TEXT_SECONDARY
-        self.char_counter.update()
+        if char_counter_control.page:
+            char_counter_control.update()
+    
+    def update_main_char_counter(self):
+        if self.is_thread_mode:
+            count = len(self.thread_text_fields)
+            self.char_counter.value = f"{count} Tweets"
+            self.char_counter.color = TEXT_SECONDARY
+        else:
+            self.update_char_count(self.single_tweet_textfield.value, self.char_counter)
+        
+        if self.char_counter.page:
+            self.char_counter.update()
     
     def clear(self):
-        self.text_field.value = ""
+        self.is_thread_mode = False
+        self.single_tweet_textfield.value = ""
+        self.thread_text_fields.clear()
+        self.thread_inputs_container.controls.clear()
+        
+        self.composer_content_area.controls.clear()
+        self.composer_content_area.controls.append(
+            ft.Row(
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                controls=[self.avatar, self.single_tweet_textfield]
+                )
+        )
+        
         self.selected_date = None
         self.selected_time = None
         self.scheduled_display.visible = False
         self.remove_image(None)
-        self.update_char_count(None)
+        
+        self.update_main_char_counter()
         self.feedback_message.visible = False 
-        self.feedback_message.update()
-        self.text_field.update()
         self.update()
     
     def show_feedback(self, message: str, is_error :bool= False):
