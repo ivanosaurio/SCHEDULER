@@ -23,7 +23,10 @@ class DashboardView(ft.Row):
         self.on_connect_twitter = on_connect_twitter
         self.connected_accounts = []
         print(f"[DashoardView] Inicializado para el usuario: {self.user_id}")
-        
+        self.post_composer = PostComposer(
+            on_schedule_click=self.handle_schedule_post_click,
+            on_thread_schedule_click=self.handle_schedule_thread_click
+        )
         #Feedback
         self.feedback_text = ft.Text(value="", color=TEXT_PRIMARY)
         self.feedback_container = ft.Container(
@@ -47,10 +50,6 @@ class DashboardView(ft.Row):
             expand=True,
             scroll=ft.ScrollMode.ADAPTIVE
         )
-        
-        self.post_composer = PostComposer(
-            on_schedule_click=self.handle_schedule_post_click,
-            on_thread_schedule_click=self.handle_schedule_thread_click)
         self.sidebar = Sidebar(on_change=self.change_view, on_logout_click=self.on_logout)
         
         page.overlay.extend([
@@ -117,10 +116,12 @@ class DashboardView(ft.Row):
                 twitter_account = next((acc for acc in self.connected_accounts if acc.get("platform") == "x"), None)
                 if twitter_account:
                     profile_url = twitter_account.get("profile_image_url")
-                    self.post_composer.update_avatar(profile_url)
+                    self.post_composer.profile_image_url = profile_url
+                    self.post_composer.initialize_composer()
         else:
             self.connected_accounts = []
             self.show_feedback(f"Error al cargar cuentas: {result.get('error')}", is_error=True)
+            self.post_composer.initialize_composer()
     
     async def process_twitter_callback(self, result: dict):
         app_instance = self.page_ref.app_instance

@@ -3,6 +3,7 @@ import threading, uuid, asyncio
 from services import supabase_service
 from datetime import datetime, time
 from theme import SURFACE, BORDER, PRIMARY, ON_PRIMARY, TEXT_SECONDARY, TEXT_PRIMARY
+from components.thread_input import TweetInputControl
 
 EMOJI_LIST = [
     "😀", "😂", "😍", "🤔", "😎", "😭", "🙏", "❤️", "👍", "👎",
@@ -15,14 +16,13 @@ class PostComposer(ft.Container):
         
         self.on_schedule_click = on_schedule_click 
         self.on_thread_schedule_click = on_thread_schedule_click
+        self.profile_image_url = profile_image_url
         self.uploaded_image_url = None
         self.selected_date = None
         self.selected_time = None
         
         #Hilo
-        self.is_thread_mode = False
-        self.thread_inputs_container = ft.Column(spacing=10)
-        self.thread_text_fields = []
+        self.thread_controls = []
         
         #Diseno del container
         self.bgcolor = SURFACE
@@ -31,27 +31,12 @@ class PostComposer(ft.Container):
         self.padding = 20
         
         self.file_picker = ft.FilePicker(on_result=self.handle_file_pick_result)
-        self.char_counter = ft.Text("0/280", color=TEXT_SECONDARY)
-        
-        self.feedback_message = ft.Text(value="", color=ft.Colors.GREEN_700, visible=False)
-        
-        #Elementos UI
-        
-        self.avatar = ft.CircleAvatar(
-            content=ft.Icon(ft.Icons.PERSON, color=TEXT_SECONDARY)
-        )
-        
-        if profile_image_url:
-            self.avatar.foreground_image_src = profile_image_url
-            self.avatar.content = None
-        
         self.date_picker = ft.DatePicker(
             on_change=self.handle_date_change,
             on_dismiss=lambda e: print("DatePicker cerrado"),
             first_date=datetime.now(),
             help_text="Selecciona una fecha para tu post"
         )
-        
         self.time_picker = ft.TimePicker(
             on_change=self.handle_time_change,
             on_dismiss=lambda e: print("TimePicker cerrado"),
@@ -59,56 +44,24 @@ class PostComposer(ft.Container):
             help_text="Selecciona una hora"
         )
         
+        self.thread_inputs_container = ft.Column(spacing=0)
+        
+        #Feeback y Fecha programada
         self.scheduled_display = ft.Text(
             "",
             color=TEXT_SECONDARY,
             visible=False
         )
+        self.feedback_message = ft.Text(value="", color=ft.Colors.GREEN_700, visible=False)
         
-        self.single_tweet_textfield = ft.TextField(
-            multiline=True,
-            min_lines=4,
-            border=ft.InputBorder.NONE,
-            hint_text="¿Qué tienes en mente?",
-            hint_style=ft.TextStyle(color=TEXT_SECONDARY),
-            text_style=ft.TextStyle(color=TEXT_PRIMARY, font_family="Roboto"),
-            expand=True,
-            on_change=lambda e: self.update_main_char_counter()
+        #Nuevos tweets
+        self.add_tweet_button = ft.TextButton(
+            text="Añadir otro tweet...",
+            icon=ft.Icons.ADD,
+            on_click=self.add_tweet_input
         )
         
-        self.composer_content_area = ft.Column(
-            controls=[
-                ft.Row(
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    controls=[
-                        self.avatar,
-                        self.single_tweet_textfield
-                    ]
-                )
-            ]
-        )
-        
-        self.add_to_thread_button = ft.IconButton(
-            icon=ft.Icons.ADD_CIRCLE_OUTLINE_ROUNDED,
-            tooltip="Añadir Tweet al Hilo",
-            on_click=self.add_tweet_to_thread,
-            icon_color=TEXT_SECONDARY
-        )
-        
-        self.image_indicator = ft.Row(
-            visible=False,
-            alignment=ft.MainAxisAlignment.CENTER,
-            controls=[
-                ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_500),
-                ft.Text("Imagen Adjunta", size=12, color=TEXT_SECONDARY),
-                ft.IconButton(
-                    icon=ft.Icons.CLOSE,
-                    icon_size=16, 
-                    on_click=self.remove_image,
-                    tooltip="Quitar imagen"
-                )
-            ]
-        )
+        self.total_tweets_counter = ft.Text("1 Tweet", color=TEXT_SECONDARY)
         
         self.schedule_button = ft.FilledButton(
             text="Programar",
@@ -123,47 +76,80 @@ class PostComposer(ft.Container):
         self.content = ft.Column(
             spacing=15,
             controls=[
-                self.composer_content_area,
+                self.thread_inputs_container,
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
+                        self.add_tweet_button
+                    ]
+                ),
+                ft.Divider(height=1, color=BORDER),
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        self.scheduled_display,
                         ft.Row(
+                            spacing=10,
                             controls=[
-                                ft.IconButton(
-                                    icon=ft.Icons.IMAGE_OUTLINED,
-                                    tooltip="Añadir imagen",
-                                    icon_color=TEXT_SECONDARY,
-                                    on_click=lambda _:self.file_picker.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif"])
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.EMOJI_EMOTIONS_OUTLINED,
-                                    tooltip="Añadir emoji",
-                                    icon_color=TEXT_SECONDARY,
-                                    on_click=self.open_emoji_picker
-                                ),
                                 ft.IconButton(
                                     icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
-                                    tooltip="Añadir emoji",
-                                    icon_color=TEXT_SECONDARY,
-                                    on_click=lambda e: self.page.open(self.date_picker)
+                                    on_click=lambda _: self.page.open(self.date_picker),
+                                    tooltip="Programar fecha y hora"
                                 ),
-                                self.add_to_thread_button
-                            ]
-                        ),
-                        ft.Row(
-                            controls=[
-                                self.char_counter,
-                                ft.Container(width=10),
+                                self.total_tweets_counter,
                                 self.schedule_button
                             ]
-                        ),
-                        self.image_indicator,
-                        ft.Row(controls=[self.scheduled_display]),
-                        ft.Row(controls=[self.feedback_message])
+                        )
                     ]
-                )
+                ),
+                ft.Row(controls=[self.feedback_message])
             ]
         )
+    
+    def initialize_composer(self):
+        print("[Composer] Inicializando el estado del compositor.")
+        if not self.thread_inputs_container.controls:
+            self.add_tweet_input()
+    
+    def add_tweet_input(self, e=None):
+        new_tweet_number = len(self.thread_controls) + 1
+        new_input = TweetInputControl(
+            tweet_number=new_tweet_number,
+            profile_image_url=self.profile_image_url,
+            on_delete=self.remove_tweet_input,
+            on_text_change=self.update_main_char_counter
+        )
+        
+        self.thread_controls.append(new_input)
+        self.thread_inputs_container.controls.append(new_input)
+        self.update_main_counter()
+        if self.page:
+            self.update()
+    
+    def remove_tweet_input(self, control_to_delete: TweetInputControl):
+        if len(self.thread_controls) <=1:
+            self.show_feedback("No puedes eliminar el único tweet.", is_error=True)
+            return
+        
+        self.thread_controls.remove(control_to_delete)
+        self.thread_inputs_container.controls.remove(control_to_delete)
+        
+        for i, control in enumerate(self.thread_controls):
+            control.tweet_number = i + 1
+            control.controls[0].controls[0] = control.build_numerical_bubble()
+        
+        self.update_main_counter()
+        if self.page:
+            self.update()
+    
+    def update_main_counter(self):
+        count = len(self.thread_controls)
+        plural = "s" if count > 1 else ""
+        self.total_tweets_counter.value = f"{count} Tweet{plural}"
+        
+        if self.total_tweets_counter.page:
+            self.total_tweets_counter.update()
+    
     
     def create_thread_tweet_input(self, content=""):
         char_counter = ft.Text("0/280", color=TEXT_SECONDARY, size=12)
@@ -293,23 +279,23 @@ class PostComposer(ft.Container):
         self.update()
     
     def schedule_button_clicked(self, e):
-        final_datetime = None
-        if self.selected_date and self.selected_time:
-            final_datetime = datetime.combine(self.selected_date, self.selected_time)
-        if self.is_thread_mode:
-            posts_content = [tf.value for tf in self.thread_text_fields if tf.value.strip()]
-            if len(posts_content) < 2:
-                self.show_feedback("Error: Un hilo debe tener al menos dos tweets.", is_error=True)
-                return
-            print(f"Programando hilo con {len(posts_content)} tweets para las {final_datetime}")
-            self.on_thread_schedule_click(final_datetime, posts_content)
+        if not self.selected_date or not self.selected_time:
+            self.show_feedback("Debes seleccionar una fecha y hora para programar.", is_error=True)
+            return
+        final_datetime = datetime.combine(self.selected_date, self.selected_time)
+        
+        posts_content = [
+            control.text_field.value for control in self.thread_controls if control.text_field.value.strip()
+        ]
+        
+        if not posts_content:
+            self.show_feedback("El contenido no puede estar vacío.", is_error=True)
+            return
+        
+        if len(posts_content) == 1:
+            self.on_schedule_click(posts_content[0], final_datetime, self.uploaded_image_url)
         else:
-            content = self.single_tweet_textfield.value
-            if not content.strip():
-                self.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
-                return
-            print(f"Programando post individual para las {final_datetime}")
-            self.on_schedule_click(content, final_datetime, self.uploaded_image_url)
+            self.on_thread_schedule_click(final_datetime, posts_content)
     
     def handle_date_change(self, e):
         self.selected_date = e.control.value
@@ -400,26 +386,13 @@ class PostComposer(ft.Container):
             self.char_counter.update()
     
     def clear(self):
-        self.is_thread_mode = False
-        self.single_tweet_textfield.value = ""
-        self.thread_text_fields.clear()
+        self.thread_controls.clear()
         self.thread_inputs_container.controls.clear()
-        
-        self.composer_content_area.controls.clear()
-        self.composer_content_area.controls.append(
-            ft.Row(
-                vertical_alignment=ft.CrossAxisAlignment.START,
-                controls=[self.avatar, self.single_tweet_textfield]
-                )
-        )
         
         self.selected_date = None
         self.selected_time = None
-        self.scheduled_display.visible = False
-        self.remove_image(None)
         
-        self.update_main_char_counter()
-        self.feedback_message.visible = False 
+        self.add_tweet_input()
         self.update()
     
     def show_feedback(self, message: str, is_error :bool= False):
