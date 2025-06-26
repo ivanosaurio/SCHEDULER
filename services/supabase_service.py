@@ -1,6 +1,46 @@
 from config import supabase
 from datetime import datetime
 from urllib.parse import urlparse
+
+def add_thread(user_id: str, platform: str, scheduled_at: datetime, posts_content: list[str]):
+    try:
+        thread_entry = {
+            "user_id": user_id,
+            "platform": platform,
+            "scheduled_at": scheduled_at,
+            "status": "scheduled"
+        }
+        thread_res = supabase.table("threads").insert(thread_entry).execute()
+        
+        if not thread_res.data:
+            raise Exception("No se pudo crear la entrada principal del hilo.")
+        
+        thread_id = thread_res.data[0]["id"]
+        print(f"Hilo creado con ID: {thread_id}")
+        
+        posts_to_insert = []
+        
+        for index, content in enumerate(posts_content):
+            if content.strip():
+                posts_to_insert.append({
+                    "user_id": user_id,
+                    "platform": platform,
+                    "content": content,
+                    "thread_id": thread_id,
+                    "thread_order": index,
+                    "status": "scheduled",
+                    "image_url": None
+                })
+        
+        if posts_to_insert:
+            posts_res = supabase.table("posts").insert(posts_to_insert).execute()
+            print(f"Insertados {len(posts_res.data)} posts para el hilo {thread_id}")
+        
+        return {"success": True, "data": thread_res.data}
+    except Exception as e:
+        print(f"Error al guardar el hilo: {e}")
+        return {"success": False, "error": str(e)}
+
 def add_post(user_id: str, content: str, scheduled_at: datetime = None, image_url: str = None):
     try:
         platform = "x"
@@ -12,7 +52,9 @@ def add_post(user_id: str, content: str, scheduled_at: datetime = None, image_ur
             "content": content,
             "scheduled_at": schedule_time.isoformat(),
             "status": "scheduled",
-            "image_url": image_url
+            "image_url": image_url,
+            "thread_id": None,
+            "thread_order": None
         }
         data, count = supabase.table("posts").insert(post_data).execute()
         print(f"Exito, se metieron los datos: {data}")
@@ -30,7 +72,7 @@ def fetch_posts(user_id: str):
         
         account_map = {acc['platform'].lower(): acc for acc in accounts_res.data}
         
-        post_res = supabase.table("posts").select("*").eq('user_id', user_id).order('scheduled_at', desc=False).execute()
+        post_res = supabase.table("posts").select("*").eq('user_id', user_id).order('scheduled_at', desc=False, nullsfirst=False).order('created_at', desc=False).execute()
         
         for post in post_res.data:
             platform = post.get("platform").lower()
@@ -50,28 +92,33 @@ def delete_post (post_id: str):
         post_to_delete_req = supabase.table("posts").select("image_url").eq("id", post_id).single().execute()
         post_data = post_to_delete_req.data
         
-        if post_data and post_data.get("image_url"):
-            image_url = post_data["image_url"]
+        if post_data and post_data.get("thread_id"):
+            thread_id = post_data["thread_id"]
+            print(f"El post {post_id} pertenece al hilo {thread_id}. Se eliminará el hilo completo.")
             
-            parsed_url = urlparse(image_url)
-            url_path_clean = parsed_url.path
-            
-            try:
-                object_path = url_path_clean.split("post-images/")[1]
-                print(f"Intentando borrar imagen del storage: {object_path}")
-                
-                supabase.storage.from_("post-images").remove([object_path])
-                print("Llamada de borrado a Supabase ejecutada")
-            except IndexError:
-                print(f"La URL de la imagen no tiene el formato esperado: {image_url}")
-        
-        data, count = supabase.table("posts").delete().eq("id", post_id).execute()
-        if count:
-            print(f"Post con ID {post_id} eliminado con éxito de la DB.")
-            return {"success": True, "data": data}
+            supabase.table("threads").delete().eq("id", thread_id).execute()
+            print(f"Hilo {thread_id} eliminado.")
+            # Aquí podríamos querer borrar imágenes de todos los posts del hilo si las tuvieran.
         else:
-            print(f"No se encontró ningún post con ID {post_id} para eliminar.")
-            return {"success": False, "error": "Post not found in DV"}
+            if post_data and post_data.get("image_url"):
+                image_url = post_data["image_url"]
+                parsed_url = urlparse(image_url)
+                url_path_clean = parsed_url.path
+                
+                try:
+                    object_path = url_path_clean.split("post-images/")[1]
+                    print(f"Intentando borrar imagen del storage: {object_path}")
+                    
+                    supabase.storage.from_("post-images").remove([object_path])
+                    print("Llamada de borrado a Supabase ejecutada")
+                except IndexError:
+                    print(f"La URL de la imagen no tiene el formato esperado: {image_url}")
+            
+            data, count = supabase.table("posts").delete().eq("id", post_id).execute()
+            if not count:
+                print(f"No se encontró ningún post con ID {post_id} para eliminar.")
+                return {"success": False, "error": "Post not found in DB"}
+        return {"success": True}
     except Exception as e:
         print(f"Error al eliminar el post {post_id}: {e}")
         return {"success": False, "error": str(e)}
@@ -82,6 +129,8 @@ def update_post(post_id: str, new_content: str, new_scheduled_at: datetime):
             "content": new_content,
             "scheduled_at": new_scheduled_at.isoformat()
         }
+        if new_scheduled_at:
+            update_data["scheduled_at"] = new_scheduled_at.isoformat()
         data, count = supabase.table("posts").update(update_data).eq("id", post_id).execute()
         
         if count:
@@ -126,7 +175,7 @@ def save_social_account(user_id: str, platform: str, username: str, access_token
             "access_token_secret": access_token_secret, #Encryptar
             "profile_image_url": profile_image_url
         }
-        data, count = supabase.table("social_accounts").upsert(account_data, on_conflict="user_id, platform, username").execute()
+        data, count = supabase.table("social_accounts").upsert(account_data, on_conflict="user_id, platform").execute()
         
         if count:
             print(f"Cuenta de {platform} @{username} guardada exitosamente para el usuario {user_id}")

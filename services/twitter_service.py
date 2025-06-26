@@ -43,7 +43,7 @@ def get_twitter_access_token(handler: tweepy.OAuth1UserHandler, oauth_verifier: 
         return {"success": False, "error": str(e)}
 
 def publish_post_to_twitter(post_data: dict, account_data: dict):
-    temp_file = None
+    temp_filename = None
     try:
         content = post_data.get("content")
         image_url = post_data.get("image_url")
@@ -100,3 +100,44 @@ def publish_post_to_twitter(post_data: dict, account_data: dict):
         if temp_filename and os.path.exists(temp_filename):
             print(f"[TwitterService] Limpiando archivo temporal: {temp_filename}")
             os.remove(temp_filename)
+
+def publish_thread(posts_in_order: list, account_data: dict):
+    try:
+        access_token = account_data.get("access_token")
+        access_token_secret = account_data.get("access_token_secret")
+        
+        if not all([API_KEY, API_SECRET, access_token, access_token_secret]):
+            return {"success": False, "error": "Faltan credenciales para publicar el hilo"}
+        
+        client_v2 = tweepy.Client(
+            consumer_key=API_KEY,
+            consumer_secret=API_SECRET,
+            access_token=access_token,
+            access_token_secret=access_token_secret
+        )
+        
+        last_tweet_id = None
+        published_tweet_ids = []
+        
+        print(f"[TwitterService] Iniciando publicación de hilo con {len(posts_in_order)} tweets.")
+        
+        for index, post in enumerate(posts_in_order):
+            content = post.get("content")
+            print(f"  -> Publicando tweet {index + 1}/{len(posts_in_order)}...")
+            
+            response = client_v2.create_tweet(
+                text=content,
+                in_reply_to_tweet_id=last_tweet_id
+            )
+            
+            new_tweet_id = response.data['id']
+            published_tweet_ids.append(new_tweet_id)
+            print(f"  -> Tweet publicado con ID: {new_tweet_id}")
+            
+            last_tweet_id = new_tweet_id
+        print(f"[TwitterService] Hilo publicado con éxito. IDs: {published_tweet_ids}")
+        return {"success": True, "data": {"tweet_ids": published_tweet_ids}}
+    except Exception as e:
+        error_message = f"Error al publicar el hilo: {e}"
+        print(error_message)
+        return {"success": False, "error": error_message}
