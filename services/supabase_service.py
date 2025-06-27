@@ -7,7 +7,7 @@ def add_thread(user_id: str, platform: str, scheduled_at: datetime, posts_conten
         thread_entry = {
             "user_id": user_id,
             "platform": platform,
-            "scheduled_at": scheduled_at,
+            "scheduled_at": scheduled_at.isoformat(),
             "status": "scheduled"
         }
         thread_res = supabase.table("threads").insert(thread_entry).execute()

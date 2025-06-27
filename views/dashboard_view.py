@@ -78,9 +78,10 @@ class DashboardView(ft.Row):
         self.page_ref.run_task(self.load_initial_data)
     
     def handle_schedule_thread_click(self, scheduled_at: datetime, posts_content: list[str]):
-        self.page_ref.run_task(self._do_schedule_and_reload, scheduled_at, posts_content)
+        self.page_ref.run_task(self.do_schedule_thread_and_reload, scheduled_at, posts_content)
     
     async def do_schedule_thread_and_reload(self, scheduled_at: datetime, posts_content: list[str]):
+        self.show_feedback("Programando hilo...", is_error=False)
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
@@ -116,12 +117,11 @@ class DashboardView(ft.Row):
                 twitter_account = next((acc for acc in self.connected_accounts if acc.get("platform") == "x"), None)
                 if twitter_account:
                     profile_url = twitter_account.get("profile_image_url")
-                    self.post_composer.profile_image_url = profile_url
-                    self.post_composer.initialize_composer()
+                    self.post_composer.update_avatar(profile_url)
         else:
             self.connected_accounts = []
             self.show_feedback(f"Error al cargar cuentas: {result.get('error')}", is_error=True)
-            self.post_composer.initialize_composer()
+            self.post_composer.update_avatar(None)
     
     async def process_twitter_callback(self, result: dict):
         app_instance = self.page_ref.app_instance
@@ -356,7 +356,8 @@ class DashboardView(ft.Row):
         self.page_ref.run_task(self._do_schedule_and_reload, content, scheduled_at, image_url)
     
     async def _do_schedule_and_reload(self, content: str, scheduled_at: datetime | None, image_url: str | None):
-        result = await self.page_ref.run_in_executor(
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
             None,
             supabase_service.add_post,
             self.user_id,
@@ -380,7 +381,7 @@ class DashboardView(ft.Row):
             self.post_composer.show_feedback("Error: El contenido no puede estar vacío.", is_error=True)
             return
         
-        result = update_post(post_id, new_content, new_scheduled_at)
+        result = supabase_service.update_post(post_id, new_content, new_scheduled_at)
         
         if result.get("success"):
             self.post_composer.show_feedback("¡Publicación actualizada con éxito!")

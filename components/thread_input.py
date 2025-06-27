@@ -2,7 +2,7 @@ import flet as ft
 from theme import BORDER, TEXT_SECONDARY, TEXT_PRIMARY, SURFACE
 
 class TweetInputControl(ft.Row):
-    def __init__(self, tweet_number: int, profile_image_url: str, on_delete, on_text_change):
+    def __init__(self, tweet_number: int, profile_image_url: str, on_delete, on_text_change, initial_content=""):
         super().__init__()
         
         self.tweet_number = tweet_number
@@ -15,6 +15,7 @@ class TweetInputControl(ft.Row):
         
         #Components
         self.text_field = ft.TextField(
+            value=initial_content,
             multiline=True,
             min_lines=3,
             border=ft.InputBorder.NONE,
