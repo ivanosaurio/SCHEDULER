@@ -356,7 +356,6 @@ class PostComposer(ft.Container):
     def schedule_button_clicked(self, e):
         if self.selected_date and self.selected_time:
             final_datetime = datetime.combine(self.selected_date, self.selected_time)
-            return
         else:
             final_datetime = datetime.now()
         
